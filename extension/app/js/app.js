@@ -104,9 +104,15 @@
   function report() {
     var d = state.einvoice;
 
+    /*
+     * Not an error, and styled as information rather than a warning: most
+     * invoices in most organizations were never e-invoiced, so this is the
+     * ordinary state for anyone opening the panel on an arbitrary invoice.
+     */
     if (!d.irn && !d.ackNo && !d.qrLink) {
-      setStatus('warn', 'Zoho Books has no e-invoice record for this invoice. It may not have '
-        + 'been pushed to the IRP, or it may be a document type that is not e-invoiced.');
+      setStatus('info', 'This invoice has no e-invoice on record. Open an invoice that has been '
+        + 'pushed to the IRP and its IRN, Ack details and QR code will appear here, ready to '
+        + 'print.');
       return;
     }
     if (!state.qr || (!state.qr.dataUri && !state.qr.remoteUrl)) {
