@@ -119,6 +119,12 @@ function buildMockScript(scenario) {
 
       if (SCENARIO.requestHangs) return never();
 
+      // The behaviour seen live in v16-v17: request rejects IMMEDIATELY with a
+      // plain object or string, never an Error instance.
+      if (SCENARIO.requestRejectsWith !== undefined) {
+        return Promise.reject(SCENARIO.requestRejectsWith);
+      }
+
       // The real SDK only honours one argument shape; the rest hang. Modelling
       // that is the point — a shape that hangs must not stall the whole run.
       var shapeOk = SCENARIO.acceptShape

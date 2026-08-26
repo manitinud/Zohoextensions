@@ -294,15 +294,28 @@ var ZFClient = (function () {
   }
 
   /*
-   * getRecord first, since it is the SDK's own route to a Books record; the
-   * API Configuration is kept as a fallback because it is already set up.
+   * Both routes RACE and the first success wins.
+   *
+   * Live behaviour showed getRecord timing out while request rejects
+   * instantly; run in series that meant a full timeout of dead waiting before
+   * the second route even started. They are independent reads, so whichever
+   * answers first is the answer — and when both fail, the wait is one timeout,
+   * with both reasons reported.
    */
   function getInvoiceRecord(invoiceId) {
-    return apiGetRecord(invoiceId).catch(function (recordErr) {
-      return callApi(API.invoice, { invoice_id: invoiceId })
-        .catch(function (cfgErr) {
-          throw new Error(recordErr.message + ' | configuration route: ' + cfgErr.message);
-        });
+    return new Promise(function (resolve, reject) {
+      var settled = false, pending = 2, errs = [];
+      function win(body) { if (!settled) { settled = true; resolve(body); } }
+      function lose(label, e) {
+        errs.push(label + ': ' + (e && e.message ? e.message : describe(e)));
+        if (--pending === 0 && !settled) {
+          settled = true;
+          reject(new Error(errs.join(' | ')));
+        }
+      }
+      apiGetRecord(invoiceId).then(win, function (e) { lose('getRecord', e); });
+      callApi(API.invoice, { invoice_id: invoiceId })
+        .then(win, function (e) { lose('configuration route', e); });
     });
   }
 

@@ -131,6 +131,27 @@ async function run(browser, name, scenario, checks) {
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
+  // 4a2. The exact failure seen live: request rejects fast with a plain object,
+  //      not an Error. The reason must reach the panel verbatim — the word
+  //      'failed' alone means the payload was discarded again.
+  await run(browser, 'request rejects with a plain object — reason surfaces',
+    Object.assign({ requestRejectsWith: { code: 57, message: 'You are not authorized to perform this operation' },
+                    getRecordHangs: true, settleMs: 4000 }, fx),
+    (s) => {
+      ok('Zoho reason reaches diagnostics',
+         /not authorized/.test(s.diag), (s.diag.match(/flat.*/) || [''])[0]);
+      ok('panel error carries the reason too', /not authorized/.test(s.status), s.status);
+      ok('no bare failed entries', !/: failed( \|||$)/.test(s.diag));
+    });
+
+  await run(browser, 'request rejects with a bare string — reason surfaces',
+    Object.assign({ requestRejectsWith: 'Extension is not authorized to access this API',
+                    getRecordHangs: true, settleMs: 4000 }, fx),
+    (s) => {
+      ok('string reason reaches diagnostics',
+         /not authorized to access/.test(s.diag), (s.diag.match(/flat.*/) || [''])[0]);
+    });
+
   // 4b. ZFAPPS.API.getRecord is the SDK's own route to a Books record; prove
   //     it is used and that request/API-configuration is only a fallback.
   await run(browser, 'getRecord is used when ZFAPPS.request refuses everything',
