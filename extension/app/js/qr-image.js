@@ -1,21 +1,16 @@
 /*
- * Gets the e-invoice QR into the print document.
+ * Gets the e-invoice QR into the printed copy.
  *
- * Zoho Books serves the QR as an image at `einvoice_details.qr_link`. That image
- * is the IRP's signed QR — the extension neither generates nor re-encodes it.
+ * Zoho Books serves the QR at einvoice_details.qr_link. That image is the IRP's
+ * signed QR — the extension neither generates nor re-encodes it.
  *
- * The print document is opened in a separate window and is usually saved as a
- * PDF, so a remote <img src> is a poor default: the saved file would depend on
- * a live Zoho session to render, and could come out blank months later. The
- * preferred path is therefore to pull the bytes through the ZFAPPS proxy and
- * inline them as a data URI, leaving the printed copy self-contained.
+ * Widgets cannot request arbitrary URLs, so the fetch goes through an API
+ * Configuration registered on the extension, with the token from qr_link passed
+ * as its parameter.
  *
- * Direct browser fetching is not an option: qr_link is cross-origin to the
- * widget's iframe and Books sends no CORS headers for it, so fetch() would be
- * blocked. ZFAPPS.request goes server-side and is not subject to that.
- *
- * If the proxy path fails, the remote URL is used as a fallback and the caller
- * is told, so the widget can warn that the QR needs a live session to render.
+ * The bytes are inlined as a data URI rather than left as a remote reference:
+ * the printed PDF is usually saved, and a remote <img> would leave that file
+ * dependent on a live Zoho session to render — possibly blank months later.
  */
 var QRImage = (function () {
 
@@ -47,9 +42,13 @@ var QRImage = (function () {
   /*
    * Resolves { dataUri, remoteUrl, inlined, error }.
    *
-   * `inlined` true means the QR is embedded and the printed PDF is portable.
-   * `inlined` false with a remoteUrl means the document will reference Zoho and
-   * needs a signed-in session to display the QR.
+   * `inlined` true means the QR bytes are embedded and the printed PDF is
+   * portable. False with a remoteUrl means the copy would reference Zoho and
+   * need a signed-in session to display the QR.
+   *
+   * The fetch goes through an API Configuration like every other Books call —
+   * widgets cannot request arbitrary URLs, so the tokenised qr_link is passed
+   * to a configuration that pins the QR endpoint.
    */
   function fetchQr(qrLink) {
     if (!qrLink) {
@@ -57,23 +56,13 @@ var QRImage = (function () {
                                error: 'This invoice has no e-invoice QR on record.' });
     }
 
-    if (typeof ZFAPPS === 'undefined' || !ZFAPPS || typeof ZFAPPS.request !== 'function') {
+    if (typeof ZFClient === 'undefined' || typeof ZFClient.getEinvoiceQr !== 'function') {
       return Promise.resolve({ dataUri: null, remoteUrl: qrLink, inlined: false,
-                               error: 'Extension SDK unavailable; linking the QR instead.' });
+                               error: 'Extension client unavailable; linking the QR instead.' });
     }
 
-    return ZFAPPS.request({
-      url: qrLink,
-      method: 'GET',
-      // Ask the proxy for bytes rather than a parsed body. Books returns an
-      // image; which of these hints the running SDK honours varies, so send
-      // both and normalise whatever comes back.
-      resp_type: 'base64',
-      response_type: 'base64'
-    }).then(function (res) {
-      var body = res && (res.response !== undefined ? res.response : res.body);
+    return ZFClient.getEinvoiceQr(qrLink).then(function (body) {
       if (body && typeof body === 'object') {
-        // Some SDK builds wrap the payload one level deeper.
         body = body.data || body.content || body.base64 || body.body || null;
       }
       var dataUri = toDataUri(body);
@@ -82,8 +71,8 @@ var QRImage = (function () {
                error: 'QR image could not be embedded; linking it instead.' };
     }).catch(function (e) {
       return { dataUri: null, remoteUrl: qrLink, inlined: false,
-               error: 'QR image could not be embedded (' + (e && e.message ? e.message : 'request failed')
-                      + '); linking it instead.' };
+               error: 'QR image could not be embedded ('
+                      + (e && e.message ? e.message : 'request failed') + '); linking it instead.' };
     });
   }
 

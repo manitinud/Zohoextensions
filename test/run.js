@@ -70,35 +70,50 @@ ok('strips a data: prefix',
    PDFStamp._base64ToBytes('data:image/png;base64,AAEC').length === 3);
 ok('tolerates whitespace', PDFStamp._base64ToBytes('AA EC\n').length === 3);
 
-console.log('\nZFClient data-centre resolution');
-// hostDomain/candidateBases read browser globals, so exercise them in a stub DOM.
-function basesFor(hostUrl) {
-  const box = {
-    console, URL, Object,
-    document: { referrer: hostUrl },
-    window: { location: { ancestorOrigins: { length: 0 } } }
-  };
-  box.window.document = box.document;
-  Object.assign(box, { ZFAPPS: undefined });
-  box.window.URL = URL;
-  vm.createContext(box);
-  box.window.location = { ancestorOrigins: { length: 0 } };
-  vm.runInContext(
-    fs.readFileSync(path.join(APP, 'zf-client.js'), 'utf8').replace(/^var ZFClient/, 'var ZFClient'),
-    box, { filename: 'zf-client.js' });
-  return box.ZFClient._candidateBases();
-}
-const inBases = basesFor('https://books.zoho.in/app');
-ok('india org hits zohoapis.in first',
-   inBases[0] === 'https://www.zohoapis.in/books/v3/', inBases[0]);
-const comBases = basesFor('https://books.zoho.com/app');
-ok('us org hits zohoapis.com first',
-   comBases[0] === 'https://www.zohoapis.com/books/v3/', comBases[0]);
-const auBases = basesFor('https://books.zoho.com.au/app');
-ok('australia org hits zohoapis.com.au first',
-   auBases[0] === 'https://www.zohoapis.com.au/books/v3/', auBases[0]);
-ok('unknown host still yields candidates', basesFor('https://example.com/').length > 1);
-ok('every data centre remains reachable as a fallback', inBases.length === 8);
+console.log('\nZFClient request shapes');
+// zf-client touches browser globals at load, so give it a minimal stand-in.
+const zbox = {
+  console, Object, Promise,
+  ZFAPPS: undefined,
+  window: {}, document: { referrer: '' }
+};
+zbox.window.document = zbox.document;
+vm.createContext(zbox);
+vm.runInContext(fs.readFileSync(path.join(APP, 'zf-client.js'), 'utf8'), zbox,
+                { filename: 'zf-client.js' });
+const ZFC = zbox.ZFClient;
+
+const shapes = ZFC._shapes('ac__in_test_getinvoice', { invoice_id: '123', organization_id: '9' });
+ok('several call shapes are attempted', shapes.length >= 5, shapes.length);
+ok('every shape carries the configuration key',
+   shapes.every(s => s.arg.api_configuration_key === 'ac__in_test_getinvoice'));
+ok('flat shape puts values at the top level',
+   shapes[0].arg.invoice_id === '123' && shapes[0].arg.organization_id === '9');
+ok('a nested shape is also tried',
+   shapes.some(s => s.arg.url_params && s.arg.url_params.invoice_id === '123'));
+ok('a bare shape is the last resort',
+   shapes[shapes.length - 1].name === 'bare'
+   && shapes[shapes.length - 1].arg.invoice_id === undefined);
+ok('every shape is named for reporting', shapes.every(s => typeof s.name === 'string'));
+
+console.log('\nAPI configuration keys');
+ok('details config named', /^ac__.+getinvoice$/.test(ZFC.API.invoice), ZFC.API.invoice);
+ok('pdf config named', /^ac__.+getinvoicepdf$/.test(ZFC.API.invoicePdf), ZFC.API.invoicePdf);
+ok('qr config named', /^ac__.+geteinvoiceqr$/.test(ZFC.API.einvoiceQr), ZFC.API.einvoiceQr);
+ok('the three keys are distinct',
+   new Set([ZFC.API.invoice, ZFC.API.invoicePdf, ZFC.API.einvoiceQr]).size === 3);
+
+console.log('\neInvoiceID extraction from a real qr_link');
+// The QR endpoint is pinned by its API configuration, so the token has to be
+// lifted out of the link Books returns and passed as a parameter.
+const QR_LINK = 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c64ec31e389'
+              + '51c2c37fa8892c055843686d38d509299c3d4561ea68d434';
+const token = /[?&]eInvoiceID=([^&]+)/i.exec(QR_LINK);
+ok('token found in qr_link', !!token);
+ok('token is the full value',
+   token[1] === '2-48da5c64ec31e38951c2c37fa8892c055843686d38d509299c3d4561ea68d434');
+ok('no token in a link without one',
+   /[?&]eInvoiceID=([^&]+)/i.exec('https://books.zoho.in/einvoice/qrcode') === null);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

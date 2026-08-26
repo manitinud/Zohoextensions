@@ -125,8 +125,7 @@
     setStatus('info', 'Fetching the invoice PDF from Zoho Books\u2026');
     $('print-btn').disabled = true;
 
-    ZFClient.getInvoicePdf(state.invoice.invoice_id,
-                           state.org && (state.org.organization_id || state.org.id))
+    ZFClient.getInvoicePdf(state.invoice.invoice_id)
       .then(function (pdfB64) {
         setStatus('info', 'Adding the e-invoice band to every page\u2026');
         return PDFStamp.stamp({
@@ -230,6 +229,7 @@
         }
         note('API config (details)', ZFClient.API.invoice);
         note('API config (pdf)', ZFClient.API.invoicePdf);
+        note('API config (qr)', ZFClient.API.einvoiceQr);
 
         return EInvoice.resolve(state.invoice);
       })

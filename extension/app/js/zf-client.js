@@ -8,38 +8,6 @@
  */
 var ZFClient = (function () {
   var org = null;
-  var apiBase = null; // resolved once, then reused
-
-  /*
-   * Zoho runs per data centre and the API domain must match the one the org
-   * lives in: an org on books.zoho.in must be queried at zohoapis.in, and a
-   * request to zohoapis.com fails rather than redirecting. The widget runs in
-   * an iframe, so the host domain is read from the embedding page.
-   */
-  var DC_DOMAINS = ['in', 'com', 'eu', 'com.au', 'jp', 'sa', 'ca', 'com.cn'];
-
-  function hostDomain() {
-    var host = '';
-    try {
-      if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) {
-        host = new URL(window.location.ancestorOrigins[0]).hostname;
-      } else if (document.referrer) {
-        host = new URL(document.referrer).hostname;
-      }
-    } catch (e) { /* cross-origin restrictions - fall through to probing */ }
-
-    // books.zoho.in -> in, books.zoho.com.au -> com.au, and so on.
-    var m = host.match(/zoho\.(com\.au|com\.cn|eu|in|jp|sa|ca|com)$/);
-    return m ? m[1] : null;
-  }
-
-  function candidateBases() {
-    var detected = hostDomain();
-    var order = detected
-      ? [detected].concat(DC_DOMAINS.filter(function (d) { return d !== detected; }))
-      : DC_DOMAINS.slice();
-    return order.map(function (d) { return 'https://www.zohoapis.' + d + '/books/v3/'; });
-  }
 
   function available() {
     return typeof ZFAPPS !== 'undefined' && ZFAPPS && ZFAPPS.extension;
@@ -85,7 +53,8 @@ var ZFClient = (function () {
    */
   var API = {
     invoice: 'ac__in_wyw1vx3_getinvoice',
-    invoicePdf: 'ac__in_wyw1vx3_getinvoicepdf'
+    invoicePdf: 'ac__in_wyw1vx3_getinvoicepdf',
+    einvoiceQr: 'ac__in_wyw1vx3_geteinvoiceqr'
   };
 
   var callShape = null;   // pinned once a shape is known to work
@@ -127,11 +96,24 @@ var ZFClient = (function () {
     });
   }
 
+  /*
+   * `values` fill the {placeholders} in the configured URL. organization_id is
+   * supplied here rather than by callers: the invoice object ZFAPPS hands over
+   * does not contain it (verified against a live Books payload), so threading
+   * it in from there silently passed undefined.
+   */
   function callApi(key, values) {
     if (typeof ZFAPPS === 'undefined' || typeof ZFAPPS.request !== 'function') {
       return Promise.reject(new Error('ZFAPPS.request is not available in this SDK.'));
     }
+    return getOrganization().then(function (o) {
+      var merged = Object.assign(
+        { organization_id: o && (o.organization_id || o.id) }, values || {});
+      return callApiWith(key, merged);
+    });
+  }
 
+  function callApiWith(key, values) {
     var shapes = shapesFor(key, values || {});
     if (callShape) {
       var pinned = shapes.filter(function (s) { return s.name === callShape; })[0];
@@ -163,12 +145,23 @@ var ZFClient = (function () {
     });
   }
 
-  function getInvoiceRecord(invoiceId, orgId) {
-    return callApi(API.invoice, { invoice_id: invoiceId, organization_id: orgId });
+  function getInvoiceRecord(invoiceId) {
+    return callApi(API.invoice, { invoice_id: invoiceId });
   }
 
-  function getInvoicePdf(invoiceId, orgId) {
-    return callApi(API.invoicePdf, { invoice_id: invoiceId, organization_id: orgId })
+  /*
+   * The e-invoice QR is served from a tokenised Books URL. An API Configuration
+   * pins a fixed URL, so the token is lifted out of qr_link and passed as the
+   * parameter the configuration declares.
+   */
+  function getEinvoiceQr(qrLink) {
+    var m = /[?&]eInvoiceID=([^&]+)/i.exec(qrLink || '');
+    if (!m) return Promise.reject(new Error('No eInvoiceID token in the QR link.'));
+    return callApi(API.einvoiceQr, { eInvoiceID: decodeURIComponent(m[1]) });
+  }
+
+  function getInvoicePdf(invoiceId) {
+    return callApi(API.invoicePdf, { invoice_id: invoiceId })
       .then(function (body) {
         if (body && typeof body === 'object') {
           body = body.data || body.content || body.base64 || body.body || null;
@@ -192,11 +185,11 @@ var ZFClient = (function () {
     getOrganization: getOrganization,
     getInvoiceRecord: getInvoiceRecord,
     getInvoicePdf: getInvoicePdf,
+    getEinvoiceQr: getEinvoiceQr,
     resize: resize,
     API: API,
     _shapeLog: function () { return shapeLog; },
     _callShape: function () { return callShape; },
-    _hostDomain: hostDomain,
-    _candidateBases: candidateBases
+    _shapes: shapesFor
   };
 })();

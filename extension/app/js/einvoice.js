@@ -76,7 +76,7 @@ var EInvoice = (function () {
     var fromContext = read(invoice.einvoice_details);
     if (fromContext.qrLink) return Promise.resolve(fromContext);
 
-    return ZFClient.getInvoiceRecord(invoice.invoice_id, invoice.organization_id)
+    return ZFClient.getInvoiceRecord(invoice.invoice_id)
       .then(function (body) {
         var full = body && (body.invoice || body);
         var fromApi = read(full && full.einvoice_details);
