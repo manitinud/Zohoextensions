@@ -11,6 +11,12 @@
         "name": "e-Invoice Print",
         "url": "/app/widget.html",
         "logo": "/app/img/logo.png"
+      },
+      {
+        "location": "invoice.creation.sidebar",
+        "name": "e-Invoice Print",
+        "url": "/app/widget.html",
+        "logo": "/app/img/logo.png"
       }
     ]
   },
