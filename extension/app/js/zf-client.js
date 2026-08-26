@@ -84,8 +84,44 @@ var ZFClient = (function () {
     ];
   }
 
+  /*
+   * Every attempt is raced against a timeout.
+   *
+   * ZFAPPS.request can neither resolve nor reject — a rejected configuration
+   * simply never settles. Without a deadline the widget sits on "Reading
+   * e-invoice details" indefinitely, which reads as a hang rather than a
+   * failure and hides whatever the remaining shapes would have told us.
+   */
+  var ATTEMPT_TIMEOUT_MS = 12000;
+
+  function withTimeout(promise, label) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        var e = new Error('no response within ' + (ATTEMPT_TIMEOUT_MS / 1000) + 's');
+        e.timedOut = true;
+        reject(e);
+      }, ATTEMPT_TIMEOUT_MS);
+      promise.then(function (v) {
+        if (settled) return;
+        settled = true; clearTimeout(timer); resolve(v);
+      }, function (e) {
+        if (settled) return;
+        settled = true; clearTimeout(timer); reject(e);
+      });
+    });
+  }
+
   function attempt(shape) {
-    return ZFAPPS.request(shape.arg).then(function (res) {
+    var call;
+    try { call = ZFAPPS.request(shape.arg); }
+    catch (e) { return Promise.reject(e); }
+    if (!call || typeof call.then !== 'function') {
+      return Promise.reject(new Error('ZFAPPS.request did not return a promise'));
+    }
+    return withTimeout(call, shape.name).then(function (res) {
       var p = parseBody(res);
       if (p.code && p.code >= 400) {
         var err = new Error((p.body && p.body.message) || ('Books API returned ' + p.code));

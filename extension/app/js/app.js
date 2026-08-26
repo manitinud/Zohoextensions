@@ -59,15 +59,22 @@
     for (var k in ZFAPPS) { keys.push(k); }
     note('ZFAPPS keys', keys.sort().join(', ') || '(none enumerable)');
     ['request', 'get', 'set', 'invoke', 'retrieve', 'store', 'API', 'linkFiles']
-      .forEach(function (m) { note('ZFAPPS.' + m, typeof ZFAPPS[m]); });
+      .forEach(function (m) {
+        // Reading a property can throw if the SDK exposes it as a getter that
+        // is not ready yet; one bad read must not silence the rest of the report.
+        try { note('ZFAPPS.' + m, typeof ZFAPPS[m]); }
+        catch (e) { note('ZFAPPS.' + m, 'threw: ' + (e.message || e)); }
+      });
 
     // ZFAPPS.API is an object rather than a function; whatever it exposes may be
     // the intended route for configured API calls.
-    if (ZFAPPS.API && typeof ZFAPPS.API === 'object') {
-      var ak = [];
-      for (var a in ZFAPPS.API) { ak.push(a + '(' + (typeof ZFAPPS.API[a])[0] + ')'); }
-      note('ZFAPPS.API members', ak.sort().join(', ') || '(none enumerable)');
-    }
+    try {
+      if (ZFAPPS.API && typeof ZFAPPS.API === 'object') {
+        var ak = [];
+        for (var a in ZFAPPS.API) { ak.push(a + '(' + (typeof ZFAPPS.API[a])[0] + ')'); }
+        note('ZFAPPS.API members', ak.sort().join(', ') || '(none enumerable)');
+      }
+    } catch (e) { note('ZFAPPS.API members', 'threw: ' + (e.message || e)); }
   }
 
   function $(id) { return document.getElementById(id); }
@@ -222,7 +229,8 @@
   }
 
   function load() {
-    setStatus('info', 'Reading e-invoice details from Zoho Books…');
+    setStatus('info', 'Reading e-invoice details from Zoho Books\u2026 '
+      + '(each attempt times out after 12s)');
     $('print-btn').disabled = true;
 
     return Promise.all([ZFClient.getInvoice(), ZFClient.getOrganization()])
