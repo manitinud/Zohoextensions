@@ -97,15 +97,35 @@ var ZFClient = (function () {
    * only .response/.body was catching the envelope and discarding the letter.
    * The fallback chain covers both generations plus a .data wrapper.
    */
+  /*
+   * Unwrap whatever ZFAPPS.request resolved with — iteratively.
+   *
+   * The live 2.0 response is an HTTP exchange record:
+   *   { status_message, status_code, header, body }
+   * where body holds the actual payload, usually as a JSON string — and that
+   * record can itself sit inside another response/body/data wrapper. One
+   * unwrapping step was never enough, so this loops: peel wrapper keys,
+   * parse JSON-looking strings, repeat until the payload is stable. The
+   * innermost status_code wins for error detection.
+   */
   function parseBody(res) {
-    var code = res && (res.status_code || res.statusCode);
-    var body;
-    if (res && res.response !== undefined) body = res.response;
-    else if (res && res.body !== undefined) body = res.body;
-    else if (res && res.data !== undefined) body = res.data;
-    else body = res;
-    if (typeof body === 'string' && /^[\s]*[{\[]/.test(body)) {
-      try { body = JSON.parse(body); } catch (e) { /* keep text */ }
+    var code;
+    var body = res;
+    var guard = 0;
+    while (guard++ < 8) {
+      if (body && typeof body === 'object') {
+        var sc = body.status_code || body.statusCode;
+        if (sc) code = sc;
+        var next;
+        if (body.response !== undefined) next = body.response;
+        else if (body.body !== undefined) next = body.body;
+        else if (body.data !== undefined) next = body.data;
+        if (next !== undefined && next !== body) { body = next; continue; }
+      }
+      if (typeof body === 'string' && /^[\s]*[{\[]/.test(body)) {
+        try { body = JSON.parse(body); continue; } catch (e) { /* plain text */ }
+      }
+      break;
     }
     return { code: code, body: body };
   }
@@ -386,17 +406,35 @@ var ZFClient = (function () {
     return callApi(API.einvoiceQr, { eInvoiceID: decodeURIComponent(m[1]) });
   }
 
+  /* Raw binary arriving as a JS string (starts '%PDF' or PNG magic) is
+   * re-encoded so every caller downstream deals only in base64. */
+  function binaryStringToBase64(str) {
+    var out = '';
+    var CHUNK = 0x8000;
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) bytes.push(str.charCodeAt(i) & 0xff);
+    for (var j = 0; j < bytes.length; j += CHUNK) {
+      out += String.fromCharCode.apply(null, bytes.slice(j, j + CHUNK));
+    }
+    return btoa(out);
+  }
+
+  function normaliseBinary(body, what) {
+    if (body && typeof body === 'object') {
+      body = body.data || body.content || body.base64 || body.body || null;
+    }
+    if (typeof body !== 'string' || !body) {
+      throw new Error('Zoho Books did not return the ' + what + ' in a readable form.');
+    }
+    if (body.slice(0, 5) === '%PDF-' || body.charCodeAt(0) === 0x89) {
+      return binaryStringToBase64(body);
+    }
+    return body;
+  }
+
   function getInvoicePdf(invoiceId) {
     return callApi(API.invoicePdf, { invoice_id: invoiceId })
-      .then(function (body) {
-        if (body && typeof body === 'object') {
-          body = body.data || body.content || body.base64 || body.body || null;
-        }
-        if (typeof body !== 'string' || !body) {
-          throw new Error('Zoho Books did not return the invoice PDF in a readable form.');
-        }
-        return body;
-      });
+      .then(function (body) { return normaliseBinary(body, 'invoice PDF'); });
   }
 
   function resize(height) {

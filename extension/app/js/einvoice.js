@@ -118,6 +118,64 @@ var EInvoice = (function () {
     };
   }
 
+
+  /*
+   * Deep, wrapper-agnostic search of an API response.
+   *
+   * Three response generations have now been seen or implied (v1 wrapper, 2.0
+   * direct, and unknown nesting), and every unwrapping assumption so far has
+   * been wrong at least once. So: stop assuming. Walk everything, parse any
+   * string that looks like JSON, and take einvoice_details / its fields from
+   * wherever they actually live.
+   */
+  function deepExtract(root) {
+    var found = { details: null, fields: {} };
+    var WANT = { inv_ref_num: 'irn', irn: 'irn', ack_number: 'ackNo',
+                 ack_date: 'ackDate', qr_link: 'qrLink',
+                 status_formatted: 'status' };
+
+    function walk(node, depth) {
+      if (depth > 6 || node === null || node === undefined) return;
+      if (typeof node === 'string') {
+        if (node.length > 20 && node.length < 300000 && /^[\s]*[{\[]/.test(node)) {
+          try { walk(JSON.parse(node), depth + 1); } catch (e) { /* not JSON */ }
+        }
+        return;
+      }
+      if (typeof node !== 'object') return;
+      if (Object.prototype.toString.call(node) === '[object Array]') {
+        for (var i = 0; i < node.length && i < 50; i++) walk(node[i], depth + 1);
+        return;
+      }
+      Object.keys(node).forEach(function (k) {
+        var v = node[k];
+        if (k === 'einvoice_details' && v && typeof v === 'object' && !found.details) {
+          found.details = v;
+        }
+        var mapped = WANT[k.toLowerCase()];
+        if (mapped && v !== null && v !== undefined && v !== ''
+            && typeof v !== 'object' && found.fields[mapped] === undefined) {
+          found.fields[mapped] = String(v);
+        }
+        walk(v, depth + 1);
+      });
+    }
+    walk(root, 0);
+    return found;
+  }
+
+  /* Compact outline of a response for the diagnostics panel — verbatim, so no
+   * wrapper shape can go undescribed again. */
+  function outline(body) {
+    try {
+      if (body === null || body === undefined) return String(body);
+      if (typeof body === 'string') {
+        return 'string[' + body.length + ']: ' + body.slice(0, 300);
+      }
+      return JSON.stringify(body).slice(0, 1200);
+    } catch (e) { return 'unserialisable: ' + (e.message || e); }
+  }
+
   function isEmpty(d) {
     return !d.irn && !d.ackNo && !d.qrLink;
   }
@@ -133,10 +191,6 @@ var EInvoice = (function () {
    */
   function resolve(invoice) {
     var fromContext = read(invoice.einvoice_details);
-
-    // Always scan, even when the context already has what we need: it costs
-    // nothing against an in-memory object and it is the single most useful
-    // thing the panel can report about an invoice that does not resolve.
     var scanned = fromScan(invoice);
 
     if (fromContext.qrLink) {
@@ -150,50 +204,68 @@ var EInvoice = (function () {
       ackDate: fromContext.ackDate || scanned.details.ackDate,
       status: fromContext.status || scanned.details.status,
       qrLink: fromContext.qrLink || scanned.details.qrLink,
-      scanHits: scanned.hits
+      scanHits: scanned.hits,
+      trace: []
     };
-
     if (merged.irn || merged.qrLink) return Promise.resolve(merged);
 
-    return ZFClient.getInvoiceRecord(invoice.invoice_id)
-      .then(function (body) {
-        var full = body && (body.invoice || body);
+    /*
+     * The Books page itself displays the e-invoice state, so ask the page
+     * before calling any API: ZFAPPS.get takes dotted paths (the official
+     * sample sets 'invoice.reference_number'), making this free if it works.
+     */
+    function tryPathGet() {
+      var paths = ['invoice.einvoice_details', 'einvoice_details', 'invoice.einvoice'];
+      return paths.reduce(function (chain, path) {
+        return chain.then(function (got) {
+          if (got) return got;
+          return ZFAPPS.get(path).then(function (r) {
+            var v = r && (r[path] !== undefined ? r[path] : r);
+            var d = read(v);
+            merged.trace.push('get(' + path + '): '
+              + (v && typeof v === 'object' ? 'keys ' + Object.keys(v).join(',') : String(v)));
+            return isEmpty(d) ? null : d;
+          }).catch(function (e) {
+            merged.trace.push('get(' + path + '): ' + (e && e.message || e));
+            return null;
+          });
+        });
+      }, Promise.resolve(null));
+    }
 
-        // Summarise the response for the diagnostics panel: what came back is
-        // the difference between 'no e-invoice' and 'wrong call'.
-        var summary = {};
-        if (body && typeof body === 'object') {
-          summary.bodyKeys = Object.keys(body).slice(0, 12).join(',');
-          if (body.code !== undefined) summary.code = body.code;
-          if (body.message) summary.message = String(body.message).slice(0, 90);
-          summary.hasInvoice = !!body.invoice;
-          if (full && typeof full === 'object') {
-            summary.invoiceKeys = Object.keys(full).length;
-            summary.hasEinvoiceDetails = !!full.einvoice_details;
+    return tryPathGet().then(function (fromPage) {
+      if (fromPage) {
+        fromPage.scanHits = merged.scanHits;
+        fromPage.trace = merged.trace;
+        return fromPage;
+      }
+      return ZFClient.getInvoiceRecord(invoice.invoice_id)
+        .then(function (body) {
+          merged.trace.push('api body: ' + outline(body));
+          var dug = deepExtract(body);
+          var d = dug.details ? read(dug.details) : {
+            irn: dug.fields.irn || null,
+            ackNo: dug.fields.ackNo || null,
+            ackDate: dug.fields.ackDate || null,
+            status: dug.fields.status || null,
+            qrLink: dug.fields.qrLink || null
+          };
+          if (!isEmpty(d)) {
+            d.scanHits = merged.scanHits;
+            d.trace = merged.trace;
+            return d;
           }
-        } else {
-          summary.bodyKeys = typeof body;
-        }
-
-        var fromApi = read(full && full.einvoice_details);
-        if (!isEmpty(fromApi)) {
-          fromApi.scanHits = merged.scanHits;
-          fromApi.apiResponse = summary;
-          return fromApi;
-        }
-        var apiScan = fromScan(full || {});
-        var winner = isEmpty(apiScan.details) ? merged : apiScan.details;
-        winner.scanHits = (merged.scanHits || []).concat(apiScan.hits);
-        winner.apiResponse = summary;
-        return winner;
-      })
-      .catch(function (err) {
-        merged.lookupError = err && err.message
-          ? err.message
-          : 'Could not read the e-invoice record from Zoho Books.';
-        return merged;
-      });
+          return merged;
+        })
+        .catch(function (err) {
+          merged.lookupError = err && err.message
+            ? err.message
+            : 'Could not read the e-invoice record from Zoho Books.';
+          return merged;
+        });
+    });
   }
 
-  return { resolve: resolve, _read: read, _isEmpty: isEmpty, _scan: fromScan };
+  return { resolve: resolve, _read: read, _isEmpty: isEmpty, _scan: fromScan,
+           _deepExtract: deepExtract, _outline: outline };
 })();

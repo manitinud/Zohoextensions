@@ -173,8 +173,8 @@ async function run(browser, name, scenario, checks) {
       ok('the code-4 reason is logged',
          /Invalid value passed for invoice_id/.test(s.diag),
          (s.diag.match(/url_params.*/) || [''])[0]);
-      ok('response summary reported', /API response has invoice: yes/.test(s.diag),
-         (s.diag.match(/API response.*/g) || []).join(' ; '));
+      ok('raw api body traced', /api body: .*invoice/.test(s.diag),
+         (s.diag.match(/api body.*/) || [''])[0].slice(0, 120));
     });
 
   // 4b. ZFAPPS.API.getRecord is the SDK's own route to a Books record; prove
@@ -213,8 +213,16 @@ async function run(browser, name, scenario, checks) {
          (s.diag.match(/: ok.*/) || [''])[0]);
     });
 
+  await run(browser, 'live exchange-record wrapper — details resolve',
+    Object.assign({ exchangeRecord: true, requireConnection: true,
+                    getRecordHangs: true, settleMs: 4000 }, fx),
+    (s) => {
+      ok('details dug out of the exchange record',
+         s.details.includes('112631363872267'), s.details);
+    });
+
   await run(browser, 'print produces a stamped PDF',
-    Object.assign({ acceptShape: 'flat', directPayload: true, getRecordHangs: true }, fx),
+    Object.assign({ acceptShape: 'flat', exchangeRecord: true, getRecordHangs: true }, fx),
     async (s, errors, page) => {
       // Capture the blob instead of letting a tab open.
       await page.evaluate(() => {

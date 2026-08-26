@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v23';
+  var BUILD = 'v24';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -268,6 +268,7 @@
         state.einvoice = d;
         // What the invoice itself contained matters most: a hit here means no
         // network call is needed at all.
+        (d.trace || []).forEach(function (t) { note('trace', t); });
         if (d.apiResponse) {
           var r = d.apiResponse;
           note('API response keys', r.bodyKeys || '?');

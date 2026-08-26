@@ -153,6 +153,14 @@ function buildMockScript(scenario) {
       //   direct:  the payload itself                (2.0 — confirmed live,
       //            where .response parsing yielded undefined)
       function respond(payload) {
+        // The shape confirmed live in v23 diagnostics: an HTTP exchange record
+        // whose body carries the payload as a JSON string.
+        if (SCENARIO.exchangeRecord) {
+          return Promise.resolve({
+            status_message: 'OK', status_code: 200, header: {},
+            body: typeof payload === 'string' ? payload : JSON.stringify(payload)
+          });
+        }
         if (SCENARIO.directPayload) return Promise.resolve(payload);
         return Promise.resolve({ status_code: 200, response: payload });
       }
