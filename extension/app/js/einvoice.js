@@ -83,7 +83,16 @@ var EInvoice = (function () {
         // Prefer whichever view actually has content.
         return isEmpty(fromApi) ? fromContext : fromApi;
       })
-      .catch(function () {
+      .catch(function (err) {
+        /*
+         * The lookup failed - which is NOT the same as the invoice having no
+         * e-invoice, and must never be reported as such. Saying "no e-invoice
+         * on record" when the request never succeeded sends whoever is looking
+         * off hunting for a data problem that does not exist.
+         */
+        fromContext.lookupError = err && err.message
+          ? err.message
+          : 'Could not read the e-invoice record from Zoho Books.';
         return fromContext;
       });
   }

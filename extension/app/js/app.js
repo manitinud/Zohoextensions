@@ -105,6 +105,16 @@
     var d = state.einvoice;
 
     /*
+     * A failed lookup is reported as a failure, never as "no e-invoice". The
+     * two look identical in the data and mean completely different things.
+     */
+    if (d.lookupError && !d.irn && !d.ackNo) {
+      setStatus('error', 'Could not read this invoice\'s e-invoice details from Zoho Books: '
+        + d.lookupError);
+      return;
+    }
+
+    /*
      * Not an error, and styled as information rather than a warning: most
      * invoices in most organizations were never e-invoiced, so this is the
      * ordinary state for anyone opening the panel on an arbitrary invoice.

@@ -8,6 +8,38 @@
  */
 var ZFClient = (function () {
   var org = null;
+  var apiBase = null; // resolved once, then reused
+
+  /*
+   * Zoho runs per data centre and the API domain must match the one the org
+   * lives in: an org on books.zoho.in must be queried at zohoapis.in, and a
+   * request to zohoapis.com fails rather than redirecting. The widget runs in
+   * an iframe, so the host domain is read from the embedding page.
+   */
+  var DC_DOMAINS = ['in', 'com', 'eu', 'com.au', 'jp', 'sa', 'ca', 'com.cn'];
+
+  function hostDomain() {
+    var host = '';
+    try {
+      if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) {
+        host = new URL(window.location.ancestorOrigins[0]).hostname;
+      } else if (document.referrer) {
+        host = new URL(document.referrer).hostname;
+      }
+    } catch (e) { /* cross-origin restrictions - fall through to probing */ }
+
+    // books.zoho.in -> in, books.zoho.com.au -> com.au, and so on.
+    var m = host.match(/zoho\.(com\.au|com\.cn|eu|in|jp|sa|ca|com)$/);
+    return m ? m[1] : null;
+  }
+
+  function candidateBases() {
+    var detected = hostDomain();
+    var order = detected
+      ? [detected].concat(DC_DOMAINS.filter(function (d) { return d !== detected; }))
+      : DC_DOMAINS.slice();
+    return order.map(function (d) { return 'https://www.zohoapis.' + d + '/books/v3/'; });
+  }
 
   function available() {
     return typeof ZFAPPS !== 'undefined' && ZFAPPS && ZFAPPS.extension;
@@ -40,34 +72,70 @@ var ZFClient = (function () {
     });
   }
 
+  function parseBody(res) {
+    var code = res && (res.status_code || res.statusCode);
+    var body = res && (res.response !== undefined ? res.response : res.body);
+    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { /* keep text */ } }
+    return { code: code, body: body };
+  }
+
+  function requestOnce(base, path, query) {
+    return ZFAPPS.request({
+      url: base + path,
+      method: 'GET',
+      url_params: query
+    }).then(function (res) {
+      var p = parseBody(res);
+      if (p.code && p.code >= 400) {
+        var err = new Error((p.body && p.body.message) || ('Books API returned ' + p.code));
+        err.statusCode = p.code;
+        err.booksCode = p.body && p.body.code;
+        throw err;
+      }
+      return p.body;
+    });
+  }
+
   /*
    * GET against the Books API through the ZFAPPS proxy.
    *
-   * `path` is relative to the Books API root, e.g. 'invoices/12345/einvoice'.
-   * Resolves the parsed response body, or rejects with an Error carrying the
-   * Books error code so callers can distinguish "not e-invoiced" (a normal
-   * state) from a real failure.
+   * `path` is relative to the Books API root, e.g. 'invoices/12345'.
+   *
+   * The first call probes data-centre domains in turn until one answers, then
+   * pins that base for the rest of the session. Probing stops at the first
+   * response that is not a transport/host failure: an authenticated 401 or a
+   * "not found" from the right data centre is a real answer and must not send
+   * us on to the next domain.
    */
   function booksGet(path, params) {
     return getOrganization().then(function (o) {
       var query = Object.assign({ organization_id: o && (o.organization_id || o.id) }, params || {});
-      return ZFAPPS.request({
-        url: 'https://www.zohoapis.com/books/v3/' + path,
-        method: 'GET',
-        url_params: query
+
+      if (apiBase) return requestOnce(apiBase, path, query);
+
+      var bases = candidateBases();
+      var lastErr = null;
+
+      return bases.reduce(function (chain, base) {
+        return chain.then(function (result) {
+          if (result !== undefined) return result;
+          return requestOnce(base, path, query).then(function (body) {
+            apiBase = base;
+            return body;
+          }).catch(function (e) {
+            lastErr = e;
+            // A response from the server (any HTTP status) means the domain is
+            // right; only keep probing when the host itself did not answer.
+            if (e.statusCode) { apiBase = base; throw e; }
+            return undefined;
+          });
+        });
+      }, Promise.resolve(undefined)).then(function (result) {
+        if (result === undefined) {
+          throw lastErr || new Error('Could not reach the Zoho Books API from this widget.');
+        }
+        return result;
       });
-    }).then(function (res) {
-      // ZFAPPS.request resolves { status_code, response|body, headers }.
-      var code = res && (res.status_code || res.statusCode);
-      var body = res && (res.response !== undefined ? res.response : res.body);
-      if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { /* leave as text */ } }
-      if (code && code >= 400) {
-        var err = new Error((body && body.message) || ('Books API returned ' + code));
-        err.statusCode = code;
-        err.booksCode = body && body.code;
-        throw err;
-      }
-      return body;
     });
   }
 
@@ -82,6 +150,8 @@ var ZFClient = (function () {
     getInvoice: getInvoice,
     getOrganization: getOrganization,
     booksGet: booksGet,
-    resize: resize
+    resize: resize,
+    _hostDomain: hostDomain,
+    _candidateBases: candidateBases
   };
 })();
