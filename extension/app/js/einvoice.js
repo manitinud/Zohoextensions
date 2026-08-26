@@ -59,6 +59,65 @@ var EInvoice = (function () {
     };
   }
 
+
+  /*
+   * Scan the invoice for e-invoice data under ANY key name, at any depth.
+   *
+   * The widget receives a 117-field invoice, and einvoice_details is not one of
+   * those fields — but the data may well be present under a different name.
+   * Finding it locally removes the API call entirely, which is the difference
+   * between an instant panel and one that waits on the network.
+   *
+   * Returns { paths: [[path, value]], found: {...} } for reporting and use.
+   */
+  var SCAN = /irn|einv|e_inv|ack_?(no|num|date)|qr_?(link|code|url)|ref_?num/i;
+
+  function scan(obj, path, out, depth) {
+    if (!obj || typeof obj !== 'object' || depth > 4) return out;
+    Object.keys(obj).forEach(function (k) {
+      var v = obj[k];
+      var here = path ? path + '.' + k : k;
+      if (SCAN.test(k) && v !== null && v !== undefined && v !== ''
+          && typeof v !== 'object') {
+        out.push([here, String(v)]);
+      }
+      if (v && typeof v === 'object') scan(v, here, out, depth + 1);
+    });
+    return out;
+  }
+
+  /*
+   * Map whatever the scan turned up onto the four fields we print. Keys are
+   * matched by suffix so both einvoice_details.inv_ref_num and a top-level
+   * inv_ref_num resolve the same way.
+   */
+  function fromScan(invoice) {
+    var hits = scan(invoice, '', [], 0);
+    var byLeaf = {};
+    hits.forEach(function (h) {
+      var leaf = h[0].split('.').pop().toLowerCase();
+      if (byLeaf[leaf] === undefined) byLeaf[leaf] = h[1];
+    });
+
+    function first(names) {
+      for (var i = 0; i < names.length; i++) {
+        if (byLeaf[names[i]] !== undefined) return byLeaf[names[i]];
+      }
+      return null;
+    }
+
+    return {
+      hits: hits,
+      details: {
+        irn: first(['inv_ref_num', 'irn', 'irn_number', 'irn_no']),
+        ackNo: first(['ack_number', 'ack_no', 'ackno']),
+        ackDate: first(['ack_date', 'ackdt', 'ackdate']),
+        status: first(['einvoice_status', 'einvoice_status_formatted']),
+        qrLink: first(['qr_link', 'qrcode_link', 'qr_code_link', 'qr_url'])
+      }
+    };
+  }
+
   function isEmpty(d) {
     return !d.irn && !d.ackNo && !d.qrLink;
   }
@@ -74,28 +133,44 @@ var EInvoice = (function () {
    */
   function resolve(invoice) {
     var fromContext = read(invoice.einvoice_details);
-    if (fromContext.qrLink) return Promise.resolve(fromContext);
+
+    // Always scan, even when the context already has what we need: it costs
+    // nothing against an in-memory object and it is the single most useful
+    // thing the panel can report about an invoice that does not resolve.
+    var scanned = fromScan(invoice);
+
+    if (fromContext.qrLink) {
+      fromContext.scanHits = scanned.hits;
+      return Promise.resolve(fromContext);
+    }
+
+    var merged = {
+      irn: fromContext.irn || scanned.details.irn,
+      ackNo: fromContext.ackNo || scanned.details.ackNo,
+      ackDate: fromContext.ackDate || scanned.details.ackDate,
+      status: fromContext.status || scanned.details.status,
+      qrLink: fromContext.qrLink || scanned.details.qrLink,
+      scanHits: scanned.hits
+    };
+
+    if (merged.irn || merged.qrLink) return Promise.resolve(merged);
 
     return ZFClient.getInvoiceRecord(invoice.invoice_id)
       .then(function (body) {
         var full = body && (body.invoice || body);
         var fromApi = read(full && full.einvoice_details);
-        // Prefer whichever view actually has content.
-        return isEmpty(fromApi) ? fromContext : fromApi;
+        if (!isEmpty(fromApi)) { fromApi.scanHits = merged.scanHits; return fromApi; }
+        var apiScan = fromScan(full || {});
+        apiScan.details.scanHits = (merged.scanHits || []).concat(apiScan.hits);
+        return isEmpty(apiScan.details) ? merged : apiScan.details;
       })
       .catch(function (err) {
-        /*
-         * The lookup failed - which is NOT the same as the invoice having no
-         * e-invoice, and must never be reported as such. Saying "no e-invoice
-         * on record" when the request never succeeded sends whoever is looking
-         * off hunting for a data problem that does not exist.
-         */
-        fromContext.lookupError = err && err.message
+        merged.lookupError = err && err.message
           ? err.message
           : 'Could not read the e-invoice record from Zoho Books.';
-        return fromContext;
+        return merged;
       });
   }
 
-  return { resolve: resolve, _read: read, _isEmpty: isEmpty };
+  return { resolve: resolve, _read: read, _isEmpty: isEmpty, _scan: fromScan };
 })();

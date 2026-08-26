@@ -200,8 +200,73 @@ var ZFClient = (function () {
     });
   }
 
+  /*
+   * Reading a Books record goes through ZFAPPS.API.getRecord, not
+   * ZFAPPS.request.
+   *
+   * A live runtime dump showed ZFAPPS.API exposes createRecord, deleteRecord,
+   * getAllRecords, getRecord and updateRecord. ZFAPPS.request is for external
+   * services reached via an API Configuration, which is why every argument form
+   * of it was refused for a Books endpoint: right method, wrong door.
+   *
+   * getRecord's parameter names are not documented here, so the plausible
+   * spellings are raced the same way and the winner is reported.
+   */
+  function getRecordShapes(invoiceId) {
+    return [
+      { name: 'module+id', arg: { module: 'invoices', id: invoiceId } },
+      { name: 'entity+id', arg: { entity: 'invoice', id: invoiceId } },
+      { name: 'module+record_id', arg: { module: 'invoices', record_id: invoiceId } },
+      { name: 'entity+entity_id', arg: { entity: 'invoice', entity_id: invoiceId } },
+      { name: 'module+invoice_id', arg: { module: 'invoices', invoice_id: invoiceId } }
+    ];
+  }
+
+  function apiGetRecord(invoiceId) {
+    if (!ZFAPPS.API || typeof ZFAPPS.API.getRecord !== 'function') {
+      return Promise.reject(new Error('ZFAPPS.API.getRecord is not available.'));
+    }
+    var shapes = getRecordShapes(invoiceId);
+
+    return new Promise(function (resolve, reject) {
+      var settled = false, pending = shapes.length, errs = [];
+      shapes.forEach(function (shape) {
+        var call;
+        try { call = ZFAPPS.API.getRecord(shape.arg); }
+        catch (e) { call = Promise.reject(e); }
+        if (!call || typeof call.then !== 'function') {
+          call = Promise.reject(new Error('did not return a promise'));
+        }
+        withTimeout(call, shape.name).then(function (res) {
+          var body = res && (res.invoice || res.response || res.data || res);
+          shapeLog.push('getRecord/' + shape.name + ': ok');
+          if (settled) return;
+          settled = true;
+          callShape = 'getRecord/' + shape.name;
+          resolve(body);
+        }).catch(function (e) {
+          shapeLog.push('getRecord/' + shape.name + ': ' + (e.message || 'failed'));
+          errs.push(shape.name + ' - ' + (e.message || 'failed'));
+          if (--pending === 0 && !settled) {
+            settled = true;
+            reject(new Error('getRecord refused every form (' + errs.join('; ') + ')'));
+          }
+        });
+      });
+    });
+  }
+
+  /*
+   * getRecord first, since it is the SDK's own route to a Books record; the
+   * API Configuration is kept as a fallback because it is already set up.
+   */
   function getInvoiceRecord(invoiceId) {
-    return callApi(API.invoice, { invoice_id: invoiceId });
+    return apiGetRecord(invoiceId).catch(function (recordErr) {
+      return callApi(API.invoice, { invoice_id: invoiceId })
+        .catch(function (cfgErr) {
+          throw new Error(recordErr.message + ' | configuration route: ' + cfgErr.message);
+        });
+    });
   }
 
   /*
@@ -241,6 +306,7 @@ var ZFClient = (function () {
     getInvoiceRecord: getInvoiceRecord,
     getInvoicePdf: getInvoicePdf,
     getEinvoiceQr: getEinvoiceQr,
+    apiGetRecord: apiGetRecord,
     resize: resize,
     API: API,
     _shapeLog: function () { return shapeLog; },

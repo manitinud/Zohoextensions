@@ -131,6 +131,29 @@ async function run(browser, name, scenario, checks) {
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
+  // 4b. ZFAPPS.API.getRecord is the SDK's own route to a Books record; prove
+  //     it is used and that request/API-configuration is only a fallback.
+  await run(browser, 'getRecord is used when ZFAPPS.request refuses everything',
+    Object.assign({ requestHangs: true, getRecordShape: 'module+id', settleMs: 4000 }, fx),
+    (s) => {
+      ok('details resolved via getRecord', s.details.includes('112631363872267'), s.details);
+      ok('getRecord recorded as the winner', /getRecord\/module\+id: ok/.test(s.diag),
+         (s.diag.match(/getRecord.*/) || [''])[0]);
+      ok('status reports ready', /^ready/i.test(s.status.trim()), s.status);
+    });
+
+  // 4c. When the invoice already carries the data, no call should be needed.
+  await run(browser, 'e-invoice data already in the invoice context',
+    Object.assign({ einvoiceInContext: true, requestHangs: true, getRecordHangs: true }, fx),
+    (s) => {
+      ok('details resolved from the invoice itself',
+         s.details.includes('112631363872267'), s.details);
+      ok('no record lookup attempted', !/getRecord\//.test(s.diag),
+         (s.diag.match(/getRecord.*/) || [''])[0]);
+      ok('scan reported what it found', /einvoice-ish keys in invoice: [1-9]/.test(s.diag),
+         (s.diag.match(/einvoice-ish keys.*/) || [''])[0]);
+    });
+
   // 5. The deliverable itself: click Print and confirm a stamped PDF is
   //    produced from the client's own PDF, with the band on the page. This
   //    path had never been exercised end to end.

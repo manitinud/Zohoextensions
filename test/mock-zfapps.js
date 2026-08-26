@@ -33,6 +33,18 @@ function buildMockScript(scenario) {
     total: 94554,
     currency_code: 'USD'
   };
+  // The live context invoice carries 117 fields; pad it so the scan runs
+  // against something realistically large.
+  for (var i = 0; i < 111; i++) { INVOICE['filler_field_' + i] = 'x'; }
+
+  if (SCENARIO.einvoiceInContext) {
+    INVOICE.einvoice_details = {
+      inv_ref_num: '56261ce5227241efb114a6d60617be398be0923f8fa39fec330407ce110be1ef',
+      ack_number: '112631363872267', ack_date: '2026-07-09 11:12:00',
+      status_formatted: 'Pushed',
+      qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c'
+    };
+  }
 
   var ORG = { organization_id: '60058776365', name: 'Adivishnu Marine Foods Pvt Ltd' };
 
@@ -49,7 +61,33 @@ function buildMockScript(scenario) {
   window.__mockCalls = [];
 
   var ZFAPPS = {
-    API: {},
+    // Observed live: ZFAPPS.API exposes record CRUD, which is the SDK's own
+    // route to a Books record.
+    API: {
+      createRecord: function () { return Promise.resolve({}); },
+      deleteRecord: function () { return Promise.resolve({}); },
+      getAllRecords: function () { return Promise.resolve({}); },
+      updateRecord: function () { return Promise.resolve({}); },
+      getRecord: function (arg) {
+        window.__mockCalls.push({ getRecord: JSON.parse(JSON.stringify(arg)) });
+        if (SCENARIO.getRecordHangs) return never();
+        var accepted = SCENARIO.getRecordShape;
+        if (accepted) {
+          var keys = Object.keys(arg).sort().join('+');
+          var wanted = {
+            'module+id': 'id+module',
+            'entity+id': 'entity+id',
+            'module+record_id': 'module+record_id',
+            'entity+entity_id': 'entity+entity_id',
+            'module+invoice_id': 'invoice_id+module'
+          }[accepted];
+          if (keys !== wanted) return never();
+        }
+        var inv = JSON.parse(JSON.stringify(INVOICE));
+        inv.einvoice_details = EINVOICE_DETAILS;
+        return Promise.resolve({ invoice: inv });
+      }
+    },
     I18N: {},
     UI: {},
     closeModal: function () {},

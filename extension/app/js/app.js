@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v16';
+  var BUILD = 'v17';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -265,6 +265,13 @@
       })
       .then(function (d) {
         state.einvoice = d;
+        // What the invoice itself contained matters most: a hit here means no
+        // network call is needed at all.
+        var hits = d.scanHits || [];
+        note('einvoice-ish keys in invoice', hits.length);
+        hits.slice(0, 12).forEach(function (h) {
+          note('  ' + h[0], String(h[1]).slice(0, 70));
+        });
         return QRImage.fetchQr(d.qrLink);
       })
       .then(function (qr) {
