@@ -96,7 +96,7 @@ var ZFClient = (function () {
   // minutes; the flag is only ever set by the local harness.
   var ATTEMPT_TIMEOUT_MS =
     (typeof location !== 'undefined' && /[?&]fastTimeouts=1/.test(location.search))
-      ? 700 : 12000;
+      ? 700 : 8000;
 
   function withTimeout(promise, label) {
     return new Promise(function (resolve, reject) {
@@ -153,6 +153,14 @@ var ZFClient = (function () {
     });
   }
 
+  /*
+   * All candidate shapes are attempted CONCURRENTLY and the first success wins.
+   *
+   * Run in series this cost six timeouts back to back — over a minute of dead
+   * waiting before the panel said anything. The attempts are independent and
+   * the calls are read-only, so there is no reason to serialise them: the wait
+   * is now one timeout regardless of how many shapes are tried.
+   */
   function callApiWith(key, values) {
     var shapes = shapesFor(key, values || {});
     if (callShape) {
@@ -160,28 +168,35 @@ var ZFClient = (function () {
       if (pinned) return attempt(pinned).then(function (p) { return p.body; });
     }
 
-    var lastErr = null;
-    return shapes.reduce(function (chain, shape) {
-      return chain.then(function (done) {
-        if (done !== undefined) return done;
-        return attempt(shape).then(function (p) {
-          callShape = shape.name;
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var pending = shapes.length;
+      var errors = [];
+
+      shapes.forEach(function (shape) {
+        attempt(shape).then(function (p) {
           shapeLog.push(shape.name + ': ok');
-          return p.body;
+          if (settled) return;
+          settled = true;
+          callShape = shape.name;
+          resolve(p.body);
         }).catch(function (e) {
-          lastErr = e;
           shapeLog.push(shape.name + ': ' + (e.message || 'failed'));
-          // A real HTTP status means the call reached Books; the argument shape
-          // was accepted and the failure is about the request itself.
-          if (e.statusCode) { callShape = shape.name; throw e; }
-          return undefined;
+          errors.push(shape.name + ' - ' + (e.message || 'failed'));
+          // An HTTP status means the call reached Books and it objected; that
+          // is a real answer and worth surfacing over a pile of timeouts.
+          if (e.statusCode && !settled) {
+            settled = true;
+            callShape = shape.name;
+            reject(e);
+            return;
+          }
+          if (--pending === 0 && !settled) {
+            settled = true;
+            reject(new Error('no argument form was accepted (' + errors.join('; ') + ')'));
+          }
         });
       });
-    }, Promise.resolve(undefined)).then(function (body) {
-      if (body === undefined) {
-        throw lastErr || new Error('No accepted form of ZFAPPS.request succeeded.');
-      }
-      return body;
     });
   }
 

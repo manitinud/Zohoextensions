@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v15';
+  var BUILD = 'v16';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -40,8 +40,11 @@
   var diag = { lines: [] };
   function note(label, value) {
     diag.lines.push([label, value]);
-    renderDiagnostics();
-    fit();   // rows added later were being clipped by the un-resized iframe
+    // Rendering or resizing must never break the caller: note() is the
+    // reporting path, and an exception here silently truncated the whole
+    // report at whichever line happened to be first.
+    try { renderDiagnostics(); } catch (e) { /* keep collecting */ }
+    try { fit(); } catch (e) { /* resize is cosmetic */ }
   }
 
   /*
@@ -233,8 +236,7 @@
   }
 
   function load() {
-    setStatus('info', 'Reading e-invoice details from Zoho Books\u2026 '
-      + '(each attempt times out after 12s)');
+    setStatus('info', 'Reading e-invoice details from Zoho Books\u2026');
     $('print-btn').disabled = true;
 
     return Promise.all([ZFClient.getInvoice(), ZFClient.getOrganization()])
@@ -288,8 +290,8 @@
     $('print-btn').addEventListener('click', openPrint);
     $('reload-btn').addEventListener('click', load);
 
-    probeSdk();
-    renderDiagnostics();
+    try { probeSdk(); } catch (e) { note('probe failed', e && e.message || String(e)); }
+    try { renderDiagnostics(); } catch (e) { /* reported on the next note */ }
 
     if (!ZFClient.available()) {
       setStatus('error', 'This widget must run inside Zoho Books.');
