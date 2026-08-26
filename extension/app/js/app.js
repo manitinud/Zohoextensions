@@ -6,8 +6,27 @@
  * issued, build the print document.
  */
 (function () {
+
+  /*
+   * Print appearance. There is no settings widget: Zoho Books extensions expose
+   * no placement for one, and ZFAPPS.set writes invoice fields rather than
+   * extension storage, so there is nowhere to persist per-org preferences.
+   * These are the single place to change how the printed band looks.
+   */
+  var SETTINGS = {
+    header: {
+      showQr: true,
+      showIrn: true,
+      showAck: true,
+      showGstin: true,
+      showStatus: true,
+      showPageNumbers: true
+    },
+    qrSizePx: 150
+  };
+
   var state = {
-    invoice: null, org: null, einvoice: null, settings: null,
+    invoice: null, org: null, einvoice: null,
     qr: null   // { dataUri, remoteUrl, inlined, error }
   };
 
@@ -63,7 +82,7 @@
       qrDataUri: state.qr ? state.qr.dataUri : null,
       qrRemoteUrl: state.qr ? state.qr.remoteUrl : null,
       qrError: state.qr ? state.qr.error : null,
-      settings: state.settings,
+      settings: SETTINGS,
       docTitle: state.einvoice.irn ? 'Tax Invoice (e-Invoice)' : 'Tax Invoice'
     });
 
@@ -107,11 +126,10 @@
     setStatus('info', 'Reading e-invoice details from Zoho Books…');
     $('print-btn').disabled = true;
 
-    return Promise.all([ZFClient.getInvoice(), ZFClient.getOrganization(), EIStorage.load()])
+    return Promise.all([ZFClient.getInvoice(), ZFClient.getOrganization()])
       .then(function (res) {
         state.invoice = res[0];
         state.org = res[1];
-        state.settings = res[2];
         if (!state.invoice || !state.invoice.invoice_id) throw new Error('No invoice in context.');
         $('invoice-no').textContent = state.invoice.invoice_number || '';
         return EInvoice.resolve(state.invoice);

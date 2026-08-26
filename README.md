@@ -15,7 +15,7 @@ Page 2 of the same invoice — the band repeats, it is not a first-page-only hea
 
 ## What it does
 
-- Adds a panel to the invoice detail page in Zoho Books.
+- Adds a panel to the invoice detail sidebar in Zoho Books.
 - Reads `einvoice_details` off the invoice: IRN, Ack No., Ack Date, status and
   the QR image link Books issued.
 - Fetches that QR image and inlines it, so a saved PDF stays readable offline.
@@ -80,23 +80,39 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the reasoning in full.
 ## Repository layout
 
 ```
-extension/
-  plugin-manifest.json      widget registration
+extension/                  a ZET project — `zet validate` and `zet pack` both pass
+  plugin-manifest.json      service FINANCE, widget at invoice.details.sidebar
   app/
-    index.html              invoice-detail widget
-    settings.html           print appearance only — no data setup
+    widget.html             the widget
     css/widget.css
+    translations/en.json
+    img/logo.png
     js/
-      app.js                widget controller
-      settings.js           settings controller
+      app.js                widget controller (print appearance constants live here)
       zf-client.js          ZFAPPS SDK wrapper (invoice, org, Books API)
       einvoice.js           reads einvoice_details off the invoice
       qr-image.js           fetches Books' QR image, inlines it as a data URI
       print-doc.js          builds the printable document
-      storage.js            per-org appearance settings
 docs/
 test/
 ```
+
+## Building the package
+
+Zoho Books extensions are built with the Zoho Extension Toolkit, not by hand-zipping:
+
+```
+npm install -g zoho-extension-toolkit
+cd extension
+zet validate      # passes
+zet pack          # writes dist/extension.zip — this is what you upload
+zet run           # serves locally for Developer Mode testing
+```
+
+`plugin-manifest.json` matches the toolkit's own `finance` template: `service` is
+`FINANCE` (not `ZOHOBOOKS`), connections are declared under `usedConnections`,
+translations live at `app/translations/`, and the SDK is loaded from
+`static.zohocdn.com/zohofinance/v1.0/zf_sdk.js`.
 
 ## Tests
 

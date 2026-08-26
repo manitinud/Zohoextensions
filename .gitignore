@@ -4,3 +4,5 @@ test/out-multipage.pdf
 test/preview.pdf
 test/preview-page*.png
 *.zip
+ZET-debug.log
+extension/dist/

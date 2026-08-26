@@ -26,7 +26,7 @@ design decision, and everything else follows from it.
 ## The shape that results
 
 ```
-Books invoice detail page
+Books invoice detail sidebar
         │
         │  ZFAPPS.get('invoice')             invoice already in widget context
         ▼
@@ -135,6 +135,10 @@ Worth stating plainly, because these are the questions that come back later:
 - **No bulk print.** One invoice at a time, from its detail page. Bulk would mean
   a second widget on the invoice list plus batched API reads — feasible on this
   foundation, but not built.
+- **No settings UI.** Zoho Books extensions expose no settings placement, and
+  `ZFAPPS.set` writes invoice fields rather than extension storage — there is
+  nowhere to persist per-org preferences. The print appearance constants live at
+  the top of `app/js/app.js` instead.
 - **Invoices e-invoiced outside Books are out of scope.** If the IRN was
   generated through a GSP or the government portal and never recorded in Books,
   `einvoice_details` is empty and the extension says so. Reading such IRNs from

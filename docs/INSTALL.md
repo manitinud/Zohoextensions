@@ -38,10 +38,10 @@ The IRN, Ack No., Ack Date, status and QR are read from the e-invoice Zoho Books
 already filed against the invoice when it was pushed to the IRP. There is no data
 source to pick and nothing to map.
 
-The one settings page the extension does have — **Settings → Extensions &
-Developer Data → Installed Extensions → e-Invoice Print → Settings** — only
-controls appearance: which rows show in the repeating band, and how wide the QR
-prints. The defaults are sensible; most orgs never open it.
+There is no settings page at all. How the printed band looks is fixed in the
+extension itself (`app/js/app.js`), so if a client wants a row dropped or the QR
+resized, that is a change on the publisher's side and a new version — not
+something the customer configures.
 
 ### Using it
 
@@ -64,54 +64,42 @@ Zoho Books, or the print window will be blocked.
 
 The extension reads the invoice and organization through the signed-in user's own
 Books session, and fetches the QR image from Zoho's own e-invoice endpoint. It
-writes nothing back to Books and stores only its own appearance settings, per
-organization. No data goes to any third-party server, and the print window makes
-no external requests once it opens.
+writes nothing back to Books and stores nothing at all. No data goes to any
+third-party server, and the print window makes no external requests once it
+opens.
 
 ---
 
 ## For the publisher
 
-### 1. Build the extension in Sigma
+### 1. Build the package
 
-1. Sign in to [sigma.zoho.in](https://sigma.zoho.in) (or `.com`, matching your
-   data centre) → **Extensions** → **New Extension**.
-2. Choose **Zoho Books** as the service.
-3. Fill in name, description, and category.
-
-Sigma then gives you a project skeleton. Replace its `app/` and
-`plugin-manifest.json` with the contents of `extension/` from this repository —
-either through Sigma's web editor, or by uploading a zip of the `extension/`
-directory's *contents* (the zip root must contain `plugin-manifest.json`, not a
-folder containing it):
+Zoho Books extensions are built with the Zoho Extension Toolkit (`zet`), not by
+uploading a hand-made zip. Sigma's "Edit Extension" hands off to the Books
+Developer Portal, which expects a `zet pack` bundle.
 
 ```
-cd extension && zip -r ../einvoice-print.zip . -x '.*' && cd ..
+npm install -g zoho-extension-toolkit
+cd extension
+zet validate      # checks the manifest and file layout
+zet pack          # writes dist/extension.zip
 ```
 
-### 2. Verify the two widget locations
+Upload `dist/extension.zip` via **Widgets → Upload widget** in the Developer
+Portal.
 
-`plugin-manifest.json` registers two widgets:
+### 2. Test locally first
 
-| Widget | Purpose | `location` in this repo |
-| --- | --- | --- |
-| `einvoice_print_invoice` | panel on the invoice detail page | `invoice.details.rightpanel` |
-| `einvoice_print_settings` | per-org settings page | `settings.custom` |
+```
+zet run
+```
 
-**Confirm these two strings against the dropdown Sigma shows when you add a
-widget.** Zoho's placeholder names are versioned per service, and a value that
-does not match one Sigma offers means the widget silently never renders. Sigma's
-widget dialog is authoritative; take the value from there and update the manifest
-if it differs. Everything else in this repository is independent of which
-placeholder you land on.
+Then enable **Developer Mode** in the Zoho Books org and open any invoice. The
+widget is served from your machine, so edits show up on reload — much faster than
+re-packing and re-uploading for every change.
 
-### 3. Test against a real organization
-
-Sigma's **Test** / **Preview** mode installs the extension into an org you pick.
-Use an org that actually has e-invoiced invoices — that is where the interesting
-cases live.
-
-Worth checking explicitly:
+Test against an org that actually has e-invoiced invoices. Worth checking
+explicitly:
 
 - an invoice with 40+ line items, to see the header repeat across pages
 - an invoice that was **never** e-invoiced, to confirm the panel says so cleanly
@@ -119,6 +107,15 @@ Worth checking explicitly:
   linked, `ZFAPPS.request` is not returning the image bytes in a shape
   `qr-image.js` recognises; the normalisation in `QRImage.fetchQr` is the place
   to adjust, and the printed PDF is not portable until it is fixed
+
+### 3. Widget placement
+
+The manifest places the widget at `invoice.details.sidebar` — the sidebar of the
+invoice **detail** page, which is where a completed invoice is viewed.
+
+The other Finance placement is `invoice.creation.sidebar`, which appears while an
+invoice is being created or edited. That is the wrong one here: this extension
+prints invoices that are already done and already e-invoiced.
 
 ### 4. Publish
 
@@ -137,6 +134,6 @@ public listing.
 
 ### 5. Updating
 
-Publish a new version from Sigma. Installed orgs pick it up; per-org settings
-persist across versions because they are stored under the extension's own
-storage key.
+Bump the version, run `zet pack` again, and upload the new `dist/extension.zip`.
+Installed orgs pick it up. The extension keeps no stored state, so there is
+nothing to migrate between versions.
