@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v19';
+  var BUILD = 'v20';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -57,6 +57,7 @@
    */
   function probeSdk() {
     note('build', BUILD);
+    note('SDK script', window.__sdkUrl || 'unknown');
 
     if (typeof ZFAPPS === 'undefined' || !ZFAPPS) {
       note('ZFAPPS', 'NOT PRESENT');
@@ -335,6 +336,12 @@
     }
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  function whenReady() {
+    // The SDK now loads asynchronously; __sdkReady always resolves (success,
+    // fallback, or nothing loaded), so this cannot hang the widget.
+    (window.__sdkReady || Promise.resolve()).then(boot);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenReady);
+  else whenReady();
 })();

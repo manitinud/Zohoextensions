@@ -3,6 +3,7 @@
     "en"
   ],
   "service": "FINANCE",
+  "sdkVersion": "2.0.0",
   "whiteListedDomains": [],
   "modules": {
     "widgets": [

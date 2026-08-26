@@ -34,7 +34,39 @@
     </p>
   </div>
 
-  <script src="https://static.zohocdn.com/zohofinance/v1.0/zf_sdk.js"></script>
+  <script>
+  /*
+   * SDK loader.
+   *
+   * API Configurations are the only sanctioned way for this widget to call
+   * Zoho Books, and the v1.0 SDK refuses them outright ("Api Configurations is
+   * supported only for sdk versions above 2.0." — verbatim from a live org).
+   * Zoho's own template still points at v1.0, so the 2.0 script is loaded
+   * explicitly, with candidate URLs tried in order and v1.0 kept last so a
+   * wrong guess degrades to the old behaviour instead of a dead widget. The
+   * winning URL is recorded for the diagnostics panel.
+   */
+  (function () {
+    var urls = [
+      'https://static.zohocdn.com/zohofinance/v2.0/zf_sdk.js',
+      'https://static.zohocdn.com/zohofinance/v2/zf_sdk.js',
+      'https://js.zohostatic.com/zohofinance/v2.0/zf_sdk.js',
+      'https://static.zohocdn.com/zohofinance/v1.0/zf_sdk.js'
+    ];
+    window.__sdkReady = new Promise(function (resolve) {
+      if (window.ZFAPPS) { window.__sdkUrl = 'pre-provided'; return resolve(); }
+      var i = 0;
+      (function next() {
+        if (i >= urls.length) { window.__sdkUrl = 'none loaded'; return resolve(); }
+        var el = document.createElement('script');
+        el.src = urls[i];
+        el.onload = function () { window.__sdkUrl = urls[i]; resolve(); };
+        el.onerror = function () { i++; next(); };
+        document.head.appendChild(el);
+      })();
+    });
+  })();
+  </script>
   <script src="js/zf-client.js"></script>
   <script src="js/einvoice.js"></script>
   <script src="js/qr-image.js"></script>
