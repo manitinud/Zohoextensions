@@ -14,7 +14,7 @@
       },
       {
         "location": "invoice.creation.sidebar",
-        "name": "e-Invoice Print",
+        "name": "e-Invoice Print (Edit View)",
         "url": "/app/widget.html",
         "logo": "/app/img/logo.png"
       }
