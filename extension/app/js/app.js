@@ -74,29 +74,51 @@
       : '';
   }
 
+  /*
+   * Produce the printable copy.
+   *
+   * The organization's own Zoho Books invoice PDF is fetched and the e-invoice
+   * band is stamped onto every page of it. The extension deliberately does not
+   * render its own invoice layout: every organization customises its Books
+   * template, and that template is the document their customers expect.
+   */
   function openPrint() {
-    var html = PrintDoc.build({
-      invoice: state.invoice,
-      org: state.org,
-      einvoice: state.einvoice,
-      qrDataUri: state.qr ? state.qr.dataUri : null,
-      qrRemoteUrl: state.qr ? state.qr.remoteUrl : null,
-      qrError: state.qr ? state.qr.error : null,
-      settings: SETTINGS,
-      docTitle: state.einvoice.irn ? 'Tax Invoice (e-Invoice)' : 'Tax Invoice'
-    });
-
-    var w = window.open('', '_blank');
-    if (!w) {
-      setStatus('warn', 'Your browser blocked the print window. Allow pop-ups for Zoho Books '
-        + 'and try again.');
+    if (!state.einvoice || (!state.einvoice.irn && !state.einvoice.ackNo)) {
+      setStatus('warn', 'Nothing to stamp - this invoice has no e-invoice details.');
       return;
     }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-    // Let images decode and the repeating header measure before printing.
-    w.onload = function () { setTimeout(function () { w.focus(); w.print(); }, 350); };
+
+    setStatus('info', 'Fetching the invoice PDF from Zoho Books\u2026');
+    $('print-btn').disabled = true;
+
+    ZFClient.booksGetBinary('invoices/' + state.invoice.invoice_id, { accept: 'pdf' })
+      .then(function (pdfB64) {
+        setStatus('info', 'Adding the e-invoice band to every page\u2026');
+        return PDFStamp.stamp({
+          pdfBytes: PDFStamp._base64ToBytes(pdfB64),
+          einvoice: state.einvoice,
+          qrPngBase64: state.qr && state.qr.dataUri ? state.qr.dataUri : null,
+          showStatus: SETTINGS.header.showStatus
+        });
+      })
+      .then(function (bytes) {
+        var blob = new Blob([bytes], { type: 'application/pdf' });
+        var url = URL.createObjectURL(blob);
+        var w = window.open(url, '_blank');
+        if (!w) {
+          setStatus('warn', 'Your browser blocked the new window. Allow pop-ups for Zoho Books, '
+            + 'then try again.');
+        } else {
+          setStatus('ok', 'e-Invoice copy ready. Print or save it from the new tab.');
+        }
+        // Give the tab time to take the blob before releasing it.
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        $('print-btn').disabled = false;
+      })
+      .catch(function (err) {
+        setStatus('error', 'Could not build the e-invoice copy: ' + (err.message || err));
+        $('print-btn').disabled = false;
+      });
   }
 
   function fit() { ZFClient.resize(document.body.scrollHeight + 16); }

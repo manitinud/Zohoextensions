@@ -1,15 +1,21 @@
 # e-Invoice Print for Zoho Books
 
-A Zoho Books (Sigma) extension that prints an already-completed invoice as an
-e-invoice copy, with the **QR code and e-invoice details repeated at the top of
-every page**.
+A Zoho Books extension that takes **the organization's own invoice PDF** and adds
+the e-invoice band — QR code, IRN, Ack No., Ack Date — to the top of **every
+page**.
+
+It does not render its own invoice layout. Every organization customises its
+Books template, and that template is the document their customers expect, so the
+PDF is fetched exactly as Books renders it and the band is stamped above the
+existing artwork.
 
 Everything comes from the e-invoice Zoho Books already filed when the invoice was
 pushed to the IRP. There is nothing to configure and nothing to enter.
 
 ![Page 1](docs/img/sample-page1.png)
 
-Page 2 of the same invoice — the band repeats, it is not a first-page-only header:
+Page 2 of the same invoice — the band repeats, and the client's own table styling
+is untouched beneath it:
 
 ![Page 2](docs/img/sample-page2.png)
 
@@ -18,11 +24,20 @@ Page 2 of the same invoice — the band repeats, it is not a first-page-only hea
 - Adds a panel to the invoice detail sidebar in Zoho Books.
 - Reads `einvoice_details` off the invoice: IRN, Ack No., Ack Date, status and
   the QR image link Books issued.
-- Fetches that QR image and inlines it, so a saved PDF stays readable offline.
-- Builds a printable A4 document with the e-invoice band in a repeating page
-  header, and opens the print dialog.
+- Fetches the invoice PDF **as the organization's own template renders it**, plus
+  the QR image Books issued for the e-invoice.
+- Rebuilds each page as: the original page embedded unchanged but scaled down
+  slightly, with the e-invoice band in the strip freed at the top. Aspect ratio
+  is preserved, so nothing in the client's design distorts.
+- Opens the result in a new tab to print or save.
 
 The extension is read-only. Nothing in Zoho Books is modified.
+
+### Removing the existing e-invoice block
+
+Books templates that already print the IRN somewhere in the body will now show it
+twice. Turn that block off in the org's **invoice template settings** — the
+extension cannot remove content from a rendered PDF, only add to it.
 
 ## What Books actually returns
 
@@ -51,19 +66,22 @@ Two details that drive the implementation:
 
 ## The one constraint worth knowing up front
 
-**A Sigma extension cannot change how Zoho Books renders its own invoice PDF.**
-The Books template engine owns that output, and it places the e-invoice block
-once per document, not once per page. So this extension does not try to patch the
-Books template — it produces its **own** print layout, which is what makes a
-per-page header possible at all.
+**A Zoho Books extension cannot change how Books renders its own invoice PDF.**
+The template engine owns that output and places the e-invoice block once per
+document, not once per page.
+
+So the extension does not try to patch the template. It takes the finished PDF
+and stamps the band onto every page of it — which preserves the org's design
+exactly while still meeting the every-page requirement.
 
 Practical consequences:
 
-- The printed copy is this extension's layout, not the org's Books template. If a
-  customer needs their exact Books template design, the layout in
-  `extension/app/js/print-doc.js` has to be matched to it.
-- Output goes through the browser's print dialog. There is no server-side PDF
-  generation and no automatic attachment back onto the invoice record.
+- Each page's content is scaled down by roughly the band's height to make room.
+  The design is unchanged, just marginally smaller.
+- Output goes to a new browser tab. There is no server-side generation and no
+  automatic attachment back onto the invoice record.
+- An existing IRN block in the template must be switched off in template settings
+  to avoid printing it twice; content cannot be removed from a rendered PDF.
 - If an org is content with the QR appearing once, Books does that natively and
   no extension is needed. The gap this fills is the *every page* requirement.
 
@@ -92,7 +110,8 @@ extension/                  a ZET project — `zet validate` and `zet pack` both
       zf-client.js          ZFAPPS SDK wrapper (invoice, org, Books API)
       einvoice.js           reads einvoice_details off the invoice
       qr-image.js           fetches Books' QR image, inlines it as a data URI
-      print-doc.js          builds the printable document
+      pdf-stamp.js          stamps the band onto every page of the org's own PDF
+      vendor-pdf-lib.js     pdf-lib 1.17.1 (MIT)
 docs/
 test/
 ```
@@ -117,14 +136,13 @@ translations live at `app/translations/`, and the SDK is loaded from
 ## Tests
 
 ```
-node test/run.js          # 43 assertions, including the real einvoice_details
-                          # payload from a live org, number-to-words, Indian digit
-                          # grouping, QR fallback behaviour and HTML escaping
-node test/verify-print.js # renders a 70-line invoice to PDF in Chromium and asserts
-                          # the e-invoice band lands on every page
-node test/preview.js      # writes page images to test/ for eyeballing the layout
+node test/run.js           # 27 assertions: real einvoice_details payloads from live
+                           # orgs, QR normalisation, IRN wrapping, and data-centre
+                           # resolution for each Zoho region
+node test/verify-stamp.js  # builds a branded multi-page "client template" PDF,
+                           # stamps it, and asserts every page carries the band AND
+                           # still contains the client's own content
 ```
 
-`verify-print.js` is the check that matters most: the repeating header is the
-claim this extension lives or dies by, so it is verified against real pagination
-rather than assumed. It needs Playwright; `preview.js` also needs pdf.js.
+`verify-stamp.js` is the check that matters: it proves both halves of the claim —
+band on every page, client artwork intact. It needs Playwright and pdf.js.

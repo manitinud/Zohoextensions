@@ -139,6 +139,37 @@ var ZFClient = (function () {
     });
   }
 
+  /*
+   * Fetches a Books response as base64 rather than parsed JSON — used for the
+   * invoice PDF, which must come back as bytes.
+   *
+   * Several SDK builds spell the "give me raw bytes" hint differently, so all
+   * the known spellings are sent and whatever shape comes back is normalised.
+   */
+  function booksGetBinary(path, params) {
+    return getOrganization().then(function (o) {
+      var query = Object.assign({ organization_id: o && (o.organization_id || o.id) }, params || {});
+      var base = apiBase || candidateBases()[0];
+      return ZFAPPS.request({
+        url: base + path,
+        method: 'GET',
+        url_params: query,
+        resp_type: 'base64',
+        response_type: 'base64',
+        responseType: 'arraybuffer'
+      });
+    }).then(function (res) {
+      var body = res && (res.response !== undefined ? res.response : res.body);
+      if (body && typeof body === 'object') {
+        body = body.data || body.content || body.base64 || body.body || null;
+      }
+      if (typeof body !== 'string' || !body) {
+        throw new Error('Zoho Books did not return the invoice PDF in a readable form.');
+      }
+      return body;
+    });
+  }
+
   function resize(height) {
     if (!available() || typeof ZFAPPS.invoke !== 'function') return Promise.resolve();
     return ZFAPPS.invoke('RESIZE', { height: String(height) + 'px' }).catch(function () {});
@@ -150,6 +181,7 @@ var ZFClient = (function () {
     getInvoice: getInvoice,
     getOrganization: getOrganization,
     booksGet: booksGet,
+    booksGetBinary: booksGetBinary,
     resize: resize,
     _hostDomain: hostDomain,
     _candidateBases: candidateBases
