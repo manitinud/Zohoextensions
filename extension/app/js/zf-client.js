@@ -72,6 +72,25 @@ var ZFClient = (function () {
     });
   }
 
+  /*
+   * Zoho Books widgets cannot call arbitrary URLs. Every endpoint must be
+   * registered in the extension as an API Configuration (Build -> API
+   * Configurations), which pins the URL, parameters and the connection used to
+   * authenticate. The widget then invokes it by its generated API name:
+   *
+   *   ZFAPPS.request({ api_configuration_key: 'ac__in_xxxxxx_getinvoice' })
+   *
+   * Dynamic segments are declared in the configured URL with single braces —
+   * .../invoices/{invoice_id} — and supplied at call time.
+   */
+  var API = {
+    invoice: 'ac__in_wyw1vx3_getinvoice',
+    invoicePdf: 'ac__in_wyw1vx3_getinvoicepdf'
+  };
+
+  var callShape = null;   // pinned once a shape is known to work
+  var shapeLog = [];
+
   function parseBody(res) {
     var code = res && (res.status_code || res.statusCode);
     var body = res && (res.response !== undefined ? res.response : res.body);
@@ -79,95 +98,86 @@ var ZFClient = (function () {
     return { code: code, body: body };
   }
 
-  function requestOnce(base, path, query) {
-    return ZFAPPS.request({
-      url: base + path,
-      method: 'GET',
-      url_params: query
-    }).then(function (res) {
+  /*
+   * How the placeholder values reach ZFAPPS.request is the one part of the
+   * contract the sample code does not show, so the plausible shapes are tried
+   * in order and the one that works is pinned for the session. Which shape won
+   * is recorded so the widget can report it rather than leaving it a mystery.
+   */
+  function shapesFor(key, values) {
+    return [
+      { name: 'flat', arg: Object.assign({ api_configuration_key: key }, values) },
+      { name: 'url_params', arg: { api_configuration_key: key, url_params: values } },
+      { name: 'params', arg: { api_configuration_key: key, params: values } },
+      { name: 'data', arg: { api_configuration_key: key, data: values } },
+      { name: 'placeholders', arg: { api_configuration_key: key, placeholders: values } },
+      { name: 'bare', arg: { api_configuration_key: key } }
+    ];
+  }
+
+  function attempt(shape) {
+    return ZFAPPS.request(shape.arg).then(function (res) {
       var p = parseBody(res);
       if (p.code && p.code >= 400) {
         var err = new Error((p.body && p.body.message) || ('Books API returned ' + p.code));
         err.statusCode = p.code;
-        err.booksCode = p.body && p.body.code;
         throw err;
       }
-      return p.body;
+      return p;
     });
   }
 
-  /*
-   * GET against the Books API through the ZFAPPS proxy.
-   *
-   * `path` is relative to the Books API root, e.g. 'invoices/12345'.
-   *
-   * The first call probes data-centre domains in turn until one answers, then
-   * pins that base for the rest of the session. Probing stops at the first
-   * response that is not a transport/host failure: an authenticated 401 or a
-   * "not found" from the right data centre is a real answer and must not send
-   * us on to the next domain.
-   */
-  function booksGet(path, params) {
-    return getOrganization().then(function (o) {
-      var query = Object.assign({ organization_id: o && (o.organization_id || o.id) }, params || {});
+  function callApi(key, values) {
+    if (typeof ZFAPPS === 'undefined' || typeof ZFAPPS.request !== 'function') {
+      return Promise.reject(new Error('ZFAPPS.request is not available in this SDK.'));
+    }
 
-      if (apiBase) return requestOnce(apiBase, path, query);
+    var shapes = shapesFor(key, values || {});
+    if (callShape) {
+      var pinned = shapes.filter(function (s) { return s.name === callShape; })[0];
+      if (pinned) return attempt(pinned).then(function (p) { return p.body; });
+    }
 
-      var bases = candidateBases();
-      var lastErr = null;
-
-      return bases.reduce(function (chain, base) {
-        return chain.then(function (result) {
-          if (result !== undefined) return result;
-          return requestOnce(base, path, query).then(function (body) {
-            apiBase = base;
-            return body;
-          }).catch(function (e) {
-            lastErr = e;
-            // A response from the server (any HTTP status) means the domain is
-            // right; only keep probing when the host itself did not answer.
-            if (e.statusCode) { apiBase = base; throw e; }
-            return undefined;
-          });
+    var lastErr = null;
+    return shapes.reduce(function (chain, shape) {
+      return chain.then(function (done) {
+        if (done !== undefined) return done;
+        return attempt(shape).then(function (p) {
+          callShape = shape.name;
+          shapeLog.push(shape.name + ': ok');
+          return p.body;
+        }).catch(function (e) {
+          lastErr = e;
+          shapeLog.push(shape.name + ': ' + (e.message || 'failed'));
+          // A real HTTP status means the call reached Books; the argument shape
+          // was accepted and the failure is about the request itself.
+          if (e.statusCode) { callShape = shape.name; throw e; }
+          return undefined;
         });
-      }, Promise.resolve(undefined)).then(function (result) {
-        if (result === undefined) {
-          throw lastErr || new Error('Could not reach the Zoho Books API from this widget.');
-        }
-        return result;
       });
-    });
-  }
-
-  /*
-   * Fetches a Books response as base64 rather than parsed JSON — used for the
-   * invoice PDF, which must come back as bytes.
-   *
-   * Several SDK builds spell the "give me raw bytes" hint differently, so all
-   * the known spellings are sent and whatever shape comes back is normalised.
-   */
-  function booksGetBinary(path, params) {
-    return getOrganization().then(function (o) {
-      var query = Object.assign({ organization_id: o && (o.organization_id || o.id) }, params || {});
-      var base = apiBase || candidateBases()[0];
-      return ZFAPPS.request({
-        url: base + path,
-        method: 'GET',
-        url_params: query,
-        resp_type: 'base64',
-        response_type: 'base64',
-        responseType: 'arraybuffer'
-      });
-    }).then(function (res) {
-      var body = res && (res.response !== undefined ? res.response : res.body);
-      if (body && typeof body === 'object') {
-        body = body.data || body.content || body.base64 || body.body || null;
-      }
-      if (typeof body !== 'string' || !body) {
-        throw new Error('Zoho Books did not return the invoice PDF in a readable form.');
+    }, Promise.resolve(undefined)).then(function (body) {
+      if (body === undefined) {
+        throw lastErr || new Error('No accepted form of ZFAPPS.request succeeded.');
       }
       return body;
     });
+  }
+
+  function getInvoiceRecord(invoiceId, orgId) {
+    return callApi(API.invoice, { invoice_id: invoiceId, organization_id: orgId });
+  }
+
+  function getInvoicePdf(invoiceId, orgId) {
+    return callApi(API.invoicePdf, { invoice_id: invoiceId, organization_id: orgId })
+      .then(function (body) {
+        if (body && typeof body === 'object') {
+          body = body.data || body.content || body.base64 || body.body || null;
+        }
+        if (typeof body !== 'string' || !body) {
+          throw new Error('Zoho Books did not return the invoice PDF in a readable form.');
+        }
+        return body;
+      });
   }
 
   function resize(height) {
@@ -180,9 +190,12 @@ var ZFClient = (function () {
     init: init,
     getInvoice: getInvoice,
     getOrganization: getOrganization,
-    booksGet: booksGet,
-    booksGetBinary: booksGetBinary,
+    getInvoiceRecord: getInvoiceRecord,
+    getInvoicePdf: getInvoicePdf,
     resize: resize,
+    API: API,
+    _shapeLog: function () { return shapeLog; },
+    _callShape: function () { return callShape; },
     _hostDomain: hostDomain,
     _candidateBases: candidateBases
   };

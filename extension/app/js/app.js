@@ -125,7 +125,8 @@
     setStatus('info', 'Fetching the invoice PDF from Zoho Books\u2026');
     $('print-btn').disabled = true;
 
-    ZFClient.booksGetBinary('invoices/' + state.invoice.invoice_id, { accept: 'pdf' })
+    ZFClient.getInvoicePdf(state.invoice.invoice_id,
+                           state.org && (state.org.organization_id || state.org.id))
       .then(function (pdfB64) {
         setStatus('info', 'Adding the e-invoice band to every page\u2026');
         return PDFStamp.stamp({
@@ -227,8 +228,8 @@
           // or an abridged one, and that decides whether an API call is needed.
           note('keys sample', ikeys.slice(0, 30).join(', '));
         }
-        note('API base tried', (ZFClient._candidateBases()[0] || '?'));
-        note('host domain seen', ZFClient._hostDomain() || 'not detectable');
+        note('API config (details)', ZFClient.API.invoice);
+        note('API config (pdf)', ZFClient.API.invoicePdf);
 
         return EInvoice.resolve(state.invoice);
       })
@@ -239,6 +240,9 @@
       .then(function (qr) {
         state.qr = qr;
         if (state.einvoice.lookupError) note('API error', state.einvoice.lookupError);
+        var log = ZFClient._shapeLog();
+        if (log.length) note('request shapes tried', log.join(' | '));
+        if (ZFClient._callShape()) note('accepted shape', ZFClient._callShape());
         if (qr && qr.error) note('QR fetch', qr.error);
         renderDiagnostics();
         renderDetails();
