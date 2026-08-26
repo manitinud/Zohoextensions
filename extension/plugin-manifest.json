@@ -3,7 +3,24 @@
     "en"
   ],
   "service": "FINANCE",
-  "whiteListedDomains": [],
+  "whiteListedDomains": [
+    "https://www.zohoapis.in",
+    "https://www.zohoapis.com",
+    "https://www.zohoapis.eu",
+    "https://www.zohoapis.com.au",
+    "https://www.zohoapis.jp",
+    "https://www.zohoapis.sa",
+    "https://www.zohoapis.ca",
+    "https://www.zohoapis.com.cn",
+    "https://books.zoho.in",
+    "https://books.zoho.com",
+    "https://books.zoho.eu",
+    "https://books.zoho.com.au",
+    "https://books.zoho.jp",
+    "https://books.zoho.sa",
+    "https://books.zoho.ca",
+    "https://books.zoho.com.cn"
+  ],
   "modules": {
     "widgets": [
       {

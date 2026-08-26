@@ -30,6 +30,14 @@
     qr: null   // { dataUri, remoteUrl, inlined, error }
   };
 
+  /*
+   * What the SDK actually handed over. Kept so the panel can show it: when a
+   * request fails inside a customer's org there is no console to inspect and no
+   * way to reproduce it here, so the widget has to be able to report on itself.
+   */
+  var diag = { lines: [] };
+  function note(label, value) { diag.lines.push([label, value]); }
+
   function $(id) { return document.getElementById(id); }
 
   function setStatus(kind, text) {
@@ -121,6 +129,17 @@
       });
   }
 
+  function renderDiagnostics() {
+    var el = $('diag');
+    if (!el || !diag.lines.length) return;
+    el.innerHTML = '<details><summary>Diagnostics</summary><div class="diag-body">'
+      + diag.lines.map(function (l) {
+          return '<div class="diag-row"><span>' + esc(l[0]) + '</span><b>'
+               + esc(l[1]) + '</b></div>';
+        }).join('')
+      + '</div></details>';
+  }
+
   function fit() { ZFClient.resize(document.body.scrollHeight + 16); }
 
   function report() {
@@ -170,6 +189,16 @@
         state.org = res[1];
         if (!state.invoice || !state.invoice.invoice_id) throw new Error('No invoice in context.');
         $('invoice-no').textContent = state.invoice.invoice_number || '';
+
+        note('SDK invoice keys', Object.keys(state.invoice).length);
+        note('einvoice_details in context',
+             state.invoice.einvoice_details ? 'yes' : 'NO');
+        if (state.invoice.einvoice_details) {
+          note('  its keys', Object.keys(state.invoice.einvoice_details).join(', '));
+        }
+        note('API base tried', (ZFClient._candidateBases()[0] || '?'));
+        note('host domain seen', ZFClient._hostDomain() || 'not detectable');
+
         return EInvoice.resolve(state.invoice);
       })
       .then(function (d) {
@@ -178,6 +207,9 @@
       })
       .then(function (qr) {
         state.qr = qr;
+        if (state.einvoice.lookupError) note('API error', state.einvoice.lookupError);
+        if (qr && qr.error) note('QR fetch', qr.error);
+        renderDiagnostics();
         renderDetails();
         report();
         $('print-btn').disabled = false;
