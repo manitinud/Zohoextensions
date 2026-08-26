@@ -7,6 +7,8 @@
  */
 (function () {
 
+  var BUILD = 'v14';
+
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
    * no placement for one, and ZFAPPS.set writes invoice fields rather than
@@ -51,6 +53,8 @@
    * runs before anything that could fail, so the report always renders.
    */
   function probeSdk() {
+    note('build', BUILD);
+
     if (typeof ZFAPPS === 'undefined' || !ZFAPPS) {
       note('ZFAPPS', 'NOT PRESENT');
       return;
@@ -291,9 +295,33 @@
       setStatus('error', 'This widget must run inside Zoho Books.');
       return;
     }
-    ZFClient.init().then(load).catch(function (err) {
-      setStatus('error', err.message || String(err));
-    });
+    var INIT_TIMEOUT_MS = 10000;
+    var initDone = false;
+
+    function proceed(how) {
+      if (initDone) return;
+      initDone = true;
+      note('extension.init', how);
+      load();
+    }
+
+    setTimeout(function () {
+      // Not fatal: init hanging has not stopped ZFAPPS.get from working, and a
+      // panel that reports what it found is worth more than one that spins.
+      proceed('timed out after ' + (INIT_TIMEOUT_MS / 1000) + 's - continuing anyway');
+    }, INIT_TIMEOUT_MS);
+
+    try {
+      var p = ZFClient.init();
+      if (p && typeof p.then === 'function') {
+        p.then(function () { proceed('ok'); },
+               function (err) { proceed('rejected: ' + (err && err.message || err)); });
+      } else {
+        proceed('did not return a promise');
+      }
+    } catch (e) {
+      proceed('threw: ' + (e && e.message || e));
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
