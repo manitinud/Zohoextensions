@@ -1,0 +1,29 @@
+{
+  "extension": {
+    "name": "e-Invoice Print",
+    "description": "Print a completed invoice as an e-invoice copy, with the QR code, IRN, Ack No. and Ack Date repeated at the top of every page. Details are read from the e-invoice Zoho Books already filed against the invoice — nothing to set up."
+  },
+  "widget": {
+    "invoice": {
+      "title": "e-Invoice Print",
+      "print": "Print e-Invoice",
+      "refresh": "Refresh"
+    },
+    "settings": {
+      "title": "e-Invoice Print — Settings",
+      "header_section": "Repeating page header",
+      "qr_section": "QR size",
+      "save": "Save",
+      "reset": "Reset to defaults"
+    }
+  },
+  "status": {
+    "loading": "Reading e-invoice details from Zoho Books…",
+    "ready": "e-Invoice details loaded from Zoho Books. Ready to print.",
+    "no_einvoice": "Zoho Books has no e-invoice record for this invoice.",
+    "no_qr": "IRN found, but Books returned no QR for this e-invoice.",
+    "qr_linked": "Ready. The QR is linked from Zoho Books rather than embedded.",
+    "popup_blocked": "Your browser blocked the print window. Allow pop-ups for Zoho Books and try again.",
+    "saved": "Settings saved."
+  }
+}
