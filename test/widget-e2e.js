@@ -203,8 +203,18 @@ async function run(browser, name, scenario, checks) {
   // 5. The deliverable itself: click Print and confirm a stamped PDF is
   //    produced from the client's own PDF, with the band on the page. This
   //    path had never been exercised end to end.
+  await run(browser, 'SDK 2.0 direct payloads — details resolve',
+    Object.assign({ directPayload: true, requireConnection: true,
+                    getRecordHangs: true, settleMs: 4000 }, fx),
+    (s) => {
+      ok('details resolved from a direct payload',
+         s.details.includes('112631363872267'), s.details);
+      ok('success log names the payload', /ok \(keys: code,message,invoice\)/.test(s.diag),
+         (s.diag.match(/: ok.*/) || [''])[0]);
+    });
+
   await run(browser, 'print produces a stamped PDF',
-    Object.assign({ acceptShape: 'flat' }, fx),
+    Object.assign({ acceptShape: 'flat', directPayload: true, getRecordHangs: true }, fx),
     async (s, errors, page) => {
       // Capture the blob instead of letting a tab open.
       await page.evaluate(() => {

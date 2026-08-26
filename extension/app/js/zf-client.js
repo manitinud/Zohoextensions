@@ -88,11 +88,34 @@ var ZFClient = (function () {
     return keys.length ? 'object with keys: ' + keys.join(', ') : String(e);
   }
 
+  /*
+   * Unwrap whatever ZFAPPS.request resolved with.
+   *
+   * The v1 SDK wrapped payloads as {status_code, response}. Live diagnostics
+   * on 2.0 showed every shape resolving 'ok' while the parsed body came out
+   * undefined — the 2.0 SDK resolves with the payload DIRECTLY, and reading
+   * only .response/.body was catching the envelope and discarding the letter.
+   * The fallback chain covers both generations plus a .data wrapper.
+   */
   function parseBody(res) {
     var code = res && (res.status_code || res.statusCode);
-    var body = res && (res.response !== undefined ? res.response : res.body);
-    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { /* keep text */ } }
+    var body;
+    if (res && res.response !== undefined) body = res.response;
+    else if (res && res.body !== undefined) body = res.body;
+    else if (res && res.data !== undefined) body = res.data;
+    else body = res;
+    if (typeof body === 'string' && /^[\s]*[{\[]/.test(body)) {
+      try { body = JSON.parse(body); } catch (e) { /* keep text */ }
+    }
     return { code: code, body: body };
+  }
+
+  /* One line saying what a payload IS, for the success log. */
+  function payloadSummary(body) {
+    if (body === null || body === undefined) return 'empty';
+    if (typeof body === 'string') return 'string[' + body.length + ']';
+    if (typeof body !== 'object') return typeof body;
+    return 'keys: ' + Object.keys(body).slice(0, 10).join(',');
   }
 
   /*
@@ -191,6 +214,9 @@ var ZFClient = (function () {
           && !p.body.invoice) {
         throw new Error('Books: ' + (p.body.message || ('code ' + p.body.code)));
       }
+      if (p.body === null || p.body === undefined) {
+        throw new Error('resolved without a payload');
+      }
       return p;
     }, function (raw) {
       // Preserve the original payload; describe() is what finally reads it.
@@ -242,7 +268,7 @@ var ZFClient = (function () {
 
       shapes.forEach(function (shape) {
         attempt(shape).then(function (p) {
-          shapeLog.push(shape.name + ': ok');
+          shapeLog.push(shape.name + ': ok (' + payloadSummary(p.body) + ')');
           if (settled) return;
           settled = true;
           callShape = shape.name;

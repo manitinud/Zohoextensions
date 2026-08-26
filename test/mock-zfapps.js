@@ -148,18 +148,23 @@ function buildMockScript(scenario) {
           response: { code: 4, message: 'Invalid value passed for invoice_id' } });
       }
 
-      if (key.indexOf('getinvoicepdf') !== -1) {
-        return Promise.resolve({ status_code: 200, response: SCENARIO.pdfBase64 || '' });
+      // Two response generations, both seen or implied live:
+      //   wrapper: {status_code, response: payload}  (v1-style)
+      //   direct:  the payload itself                (2.0 — confirmed live,
+      //            where .response parsing yielded undefined)
+      function respond(payload) {
+        if (SCENARIO.directPayload) return Promise.resolve(payload);
+        return Promise.resolve({ status_code: 200, response: payload });
       }
-      if (key.indexOf('geteinvoiceqr') !== -1) {
-        return Promise.resolve({ status_code: 200, response: SCENARIO.qrBase64 || '' });
-      }
+
+      if (key.indexOf('getinvoicepdf') !== -1) return respond(SCENARIO.pdfBase64 || '');
+      if (key.indexOf('geteinvoiceqr') !== -1) return respond(SCENARIO.qrBase64 || '');
       if (key.indexOf('getinvoice') !== -1) {
         var inv = JSON.parse(JSON.stringify(INVOICE));
         inv.einvoice_details = EINVOICE_DETAILS;
-        return Promise.resolve({ status_code: 200, response: { invoice: inv } });
+        return respond({ code: 0, message: 'success', invoice: inv });
       }
-      return Promise.resolve({ status_code: 404, response: { message: 'no such configuration' } });
+      return respond({ code: 5, message: 'no such configuration' });
     }
   };
 
