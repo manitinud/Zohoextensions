@@ -120,6 +120,10 @@ var ZFClient = (function () {
       { name: 'conn_url_params',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
                url_params: values } },
+      { name: 'conn_both',
+        arg: Object.assign({ api_configuration_key: key,
+                             connection_link_name: CONNECTION,
+                             url_params: values }, values) },
       { name: 'flat', arg: Object.assign({ api_configuration_key: key }, values) },
       { name: 'url_params', arg: { api_configuration_key: key, url_params: values } },
       { name: 'bare', arg: { api_configuration_key: key } }
@@ -174,6 +178,18 @@ var ZFClient = (function () {
         err.statusCode = p.code;
         err.raw = p.body;
         throw err;
+      }
+      /*
+       * Books reports application errors inside HTTP 200 as {code, message} —
+       * e.g. code 4 'Invalid value passed for invoice_id' when a placeholder
+       * did not substitute. That is a failure of THIS shape, not of the whole
+       * call, so it carries no statusCode: the race keeps going and a shape
+       * that substitutes correctly can still win.
+       */
+      if (p.body && typeof p.body === 'object'
+          && p.body.code !== undefined && Number(p.body.code) !== 0
+          && !p.body.invoice) {
+        throw new Error('Books: ' + (p.body.message || ('code ' + p.body.code)));
       }
       return p;
     }, function (raw) {

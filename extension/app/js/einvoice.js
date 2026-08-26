@@ -158,11 +158,34 @@ var EInvoice = (function () {
     return ZFClient.getInvoiceRecord(invoice.invoice_id)
       .then(function (body) {
         var full = body && (body.invoice || body);
+
+        // Summarise the response for the diagnostics panel: what came back is
+        // the difference between 'no e-invoice' and 'wrong call'.
+        var summary = {};
+        if (body && typeof body === 'object') {
+          summary.bodyKeys = Object.keys(body).slice(0, 12).join(',');
+          if (body.code !== undefined) summary.code = body.code;
+          if (body.message) summary.message = String(body.message).slice(0, 90);
+          summary.hasInvoice = !!body.invoice;
+          if (full && typeof full === 'object') {
+            summary.invoiceKeys = Object.keys(full).length;
+            summary.hasEinvoiceDetails = !!full.einvoice_details;
+          }
+        } else {
+          summary.bodyKeys = typeof body;
+        }
+
         var fromApi = read(full && full.einvoice_details);
-        if (!isEmpty(fromApi)) { fromApi.scanHits = merged.scanHits; return fromApi; }
+        if (!isEmpty(fromApi)) {
+          fromApi.scanHits = merged.scanHits;
+          fromApi.apiResponse = summary;
+          return fromApi;
+        }
         var apiScan = fromScan(full || {});
-        apiScan.details.scanHits = (merged.scanHits || []).concat(apiScan.hits);
-        return isEmpty(apiScan.details) ? merged : apiScan.details;
+        var winner = isEmpty(apiScan.details) ? merged : apiScan.details;
+        winner.scanHits = (merged.scanHits || []).concat(apiScan.hits);
+        winner.apiResponse = summary;
+        return winner;
       })
       .catch(function (err) {
         merged.lookupError = err && err.message

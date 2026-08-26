@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v21';
+  var BUILD = 'v22';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -268,6 +268,16 @@
         state.einvoice = d;
         // What the invoice itself contained matters most: a hit here means no
         // network call is needed at all.
+        if (d.apiResponse) {
+          var r = d.apiResponse;
+          note('API response keys', r.bodyKeys || '?');
+          if (r.code !== undefined) note('API response code', r.code);
+          if (r.message) note('API response message', r.message);
+          note('API response has invoice', r.hasInvoice ? 'yes ('
+               + (r.invoiceKeys || '?') + ' keys)' : 'NO');
+          note('API invoice has einvoice_details',
+               r.hasEinvoiceDetails ? 'YES' : 'no');
+        }
         var hits = d.scanHits || [];
         note('einvoice-ish keys in invoice', hits.length);
         hits.slice(0, 12).forEach(function (h) {

@@ -162,6 +162,21 @@ async function run(browser, name, scenario, checks) {
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
+  // 4a4. Books app-level error inside HTTP 200 (code 4, placeholder not
+  //      substituted). Must fail that shape and let a flat-value shape win —
+  //      and must never masquerade as an invoice with no e-invoice.
+  await run(browser, 'Books code-4 body fails the shape, flat values win',
+    Object.assign({ booksCodeUnlessFlat: true, getRecordHangs: true, settleMs: 4000 }, fx),
+    (s) => {
+      ok('details resolved via a flat-value shape',
+         s.details.includes('112631363872267'), s.details);
+      ok('the code-4 reason is logged',
+         /Invalid value passed for invoice_id/.test(s.diag),
+         (s.diag.match(/url_params.*/) || [''])[0]);
+      ok('response summary reported', /API response has invoice: yes/.test(s.diag),
+         (s.diag.match(/API response.*/g) || []).join(' ; '));
+    });
+
   // 4b. ZFAPPS.API.getRecord is the SDK's own route to a Books record; prove
   //     it is used and that request/API-configuration is only a fallback.
   await run(browser, 'getRecord is used when ZFAPPS.request refuses everything',

@@ -143,6 +143,11 @@ function buildMockScript(scenario) {
       if (!shapeOk) return never();
 
       var key = arg.api_configuration_key || '';
+      if (SCENARIO.booksCodeUnlessFlat && arg.invoice_id === undefined) {
+        return Promise.resolve({ status_code: 200,
+          response: { code: 4, message: 'Invalid value passed for invoice_id' } });
+      }
+
       if (key.indexOf('getinvoicepdf') !== -1) {
         return Promise.resolve({ status_code: 200, response: SCENARIO.pdfBase64 || '' });
       }
