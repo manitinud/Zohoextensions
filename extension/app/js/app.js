@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v14';
+  var BUILD = 'v15';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -295,7 +295,9 @@
       setStatus('error', 'This widget must run inside Zoho Books.');
       return;
     }
-    var INIT_TIMEOUT_MS = 10000;
+    var INIT_TIMEOUT_MS =
+      (typeof location !== 'undefined' && /[?&]fastTimeouts=1/.test(location.search))
+        ? 600 : 10000;
     var initDone = false;
 
     function proceed(how) {

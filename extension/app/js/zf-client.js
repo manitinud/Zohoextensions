@@ -92,7 +92,11 @@ var ZFClient = (function () {
    * e-invoice details" indefinitely, which reads as a hang rather than a
    * failure and hides whatever the remaining shapes would have told us.
    */
-  var ATTEMPT_TIMEOUT_MS = 12000;
+  // Shortened under test so a full six-shape sweep takes seconds rather than
+  // minutes; the flag is only ever set by the local harness.
+  var ATTEMPT_TIMEOUT_MS =
+    (typeof location !== 'undefined' && /[?&]fastTimeouts=1/.test(location.search))
+      ? 700 : 12000;
 
   function withTimeout(promise, label) {
     return new Promise(function (resolve, reject) {

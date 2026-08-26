@@ -136,13 +136,31 @@ translations live at `app/translations/`, and the SDK is loaded from
 ## Tests
 
 ```
-node test/run.js           # 27 assertions: real einvoice_details payloads from live
-                           # orgs, QR normalisation, IRN wrapping, and data-centre
-                           # resolution for each Zoho region
+node test/run.js           # 35 unit assertions: real einvoice_details payloads from
+                           # live orgs, QR normalisation, IRN wrapping, call-shape
+                           # construction, eInvoiceID extraction
 node test/verify-stamp.js  # builds a branded multi-page "client template" PDF,
-                           # stamps it, and asserts every page carries the band AND
+                           # stamps it, asserts every page carries the band AND
                            # still contains the client's own content
+node test/widget-e2e.js    # runs the real widget in Chromium against a mocked
+                           # ZFAPPS: 26 assertions across five scenarios, ending
+                           # with a Print that produces a stamped PDF
 ```
 
-`verify-stamp.js` is the check that matters: it proves both halves of the claim —
-band on every page, client artwork intact. It needs Playwright and pdf.js.
+### Testing without a live organization
+
+`widget-e2e.js` exists because the alternative was testing in a client's
+production Books org, which is not acceptable. `test/mock-zfapps.js` reproduces
+what the real SDK was observed to do in a live run — including the two behaviours
+that cost the most time:
+
+- `extension.init()` and `request()` can **hang**: neither resolving nor
+  rejecting. Every failure therefore looked like a freeze, and every wrong guess
+  looked identical to every other wrong guess.
+- `get('invoice')` returns an invoice with **no `einvoice_details`**, so the
+  details must come from an API Configuration call.
+
+The scenarios cover the happy path, a hanging `init`, every request hanging, a
+run where only a nested argument shape is accepted, and the Print path end to
+end. Timeouts are shortened via a `?fastTimeouts=1` flag so a full run takes
+seconds.

@@ -6,3 +6,7 @@ test/preview-page*.png
 *.zip
 ZET-debug.log
 extension/dist/
+test/e2e-stamped.pdf
+test/client-template.pdf
+test/stamped.pdf
+test/stamped-page*.png
