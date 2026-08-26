@@ -127,7 +127,7 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ acceptShape: 'url_params', settleMs: 8000 }, fx),
     (s) => {
       ok('still resolves the details', s.details.includes('112631363872267'), s.details);
-      ok('records url_params as the winner', /accepted shape: url_params/.test(s.diag),
+      ok('records a url_params-bearing winner', /accepted shape: (conn_)?url_params/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
@@ -150,6 +150,16 @@ async function run(browser, name, scenario, checks) {
     (s) => {
       ok('string reason reaches diagnostics',
          /not authorized to access/.test(s.diag), (s.diag.match(/flat.*/) || [''])[0]);
+    });
+
+  // 4a3. SDK 2.0 live behaviour: connection-less calls rejected. The
+  //      connection-bearing shapes must win.
+  await run(browser, 'SDK 2.0 requires the connection named in the call',
+    Object.assign({ requireConnection: true, getRecordHangs: true, settleMs: 4000 }, fx),
+    (s) => {
+      ok('details resolved', s.details.includes('112631363872267'), s.details);
+      ok('a connection-bearing shape won', /accepted shape: conn/.test(s.diag),
+         (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
   // 4b. ZFAPPS.API.getRecord is the SDK's own route to a Books record; prove

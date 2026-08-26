@@ -125,6 +125,14 @@ function buildMockScript(scenario) {
         return Promise.reject(SCENARIO.requestRejectsWith);
       }
 
+      // SDK 2.0 live behaviour: a configured call without the connection named
+      // is rejected with this exact string.
+      if (SCENARIO.requireConnection
+          && arg.connection_link_name !== 'zbooks'
+          && arg.connectionLinkName !== 'zbooks') {
+        return Promise.reject('No connections are provided');
+      }
+
       // The real SDK only honours one argument shape; the rest hang. Modelling
       // that is the point — a shape that hangs must not stall the whole run.
       var shapeOk = SCENARIO.acceptShape

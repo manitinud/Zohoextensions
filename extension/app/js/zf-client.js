@@ -101,13 +101,27 @@ var ZFClient = (function () {
    * in order and the one that works is pinned for the session. Which shape won
    * is recorded so the widget can report it rather than leaving it a mystery.
    */
+  /*
+   * SDK 2.0 rejected every connection-less form with 'No connections are
+   * provided', so the connection link is now named in the argument. Its exact
+   * key spelling is undocumented here; both casings are raced first, with the
+   * bare forms kept last in case the manifest declaration alone satisfies it.
+   */
+  var CONNECTION = 'zbooks';
+
   function shapesFor(key, values) {
     return [
+      { name: 'conn_flat',
+        arg: Object.assign({ api_configuration_key: key,
+                             connection_link_name: CONNECTION }, values) },
+      { name: 'connCamel_flat',
+        arg: Object.assign({ api_configuration_key: key,
+                             connectionLinkName: CONNECTION }, values) },
+      { name: 'conn_url_params',
+        arg: { api_configuration_key: key, connection_link_name: CONNECTION,
+               url_params: values } },
       { name: 'flat', arg: Object.assign({ api_configuration_key: key }, values) },
       { name: 'url_params', arg: { api_configuration_key: key, url_params: values } },
-      { name: 'params', arg: { api_configuration_key: key, params: values } },
-      { name: 'data', arg: { api_configuration_key: key, data: values } },
-      { name: 'placeholders', arg: { api_configuration_key: key, placeholders: values } },
       { name: 'bare', arg: { api_configuration_key: key } }
     ];
   }

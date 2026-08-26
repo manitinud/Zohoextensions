@@ -22,5 +22,10 @@
     ]
   },
   "config": [],
-  "usedConnections": []
+  "usedConnections": [
+    {
+      "connectionLinkName": "zbooks",
+      "connectionName": "zbooks"
+    }
+  ]
 }
