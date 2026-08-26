@@ -36,7 +36,33 @@
    * way to reproduce it here, so the widget has to be able to report on itself.
    */
   var diag = { lines: [] };
-  function note(label, value) { diag.lines.push([label, value]); }
+  function note(label, value) { diag.lines.push([label, value]); renderDiagnostics(); }
+
+  /*
+   * Report what the SDK actually exposes.
+   *
+   * The extension cannot be run outside a Zoho Books organization, and the
+   * Zoho developer docs are not reachable from where this was written, so the
+   * available ZFAPPS surface has to be discovered from inside a real org. This
+   * runs before anything that could fail, so the report always renders.
+   */
+  function probeSdk() {
+    if (typeof ZFAPPS === 'undefined' || !ZFAPPS) {
+      note('ZFAPPS', 'NOT PRESENT');
+      return;
+    }
+    var keys = [];
+    for (var k in ZFAPPS) { keys.push(k); }
+    note('ZFAPPS keys', keys.sort().join(', ') || '(none enumerable)');
+    ['request', 'get', 'set', 'invoke', 'extension'].forEach(function (m) {
+      note('ZFAPPS.' + m, typeof ZFAPPS[m]);
+    });
+    if (ZFAPPS.extension) {
+      var ek = [];
+      for (var e in ZFAPPS.extension) { ek.push(e); }
+      note('ZFAPPS.extension keys', ek.sort().join(', ') || '(none enumerable)');
+    }
+  }
 
   function $(id) { return document.getElementById(id); }
 
@@ -132,7 +158,7 @@
   function renderDiagnostics() {
     var el = $('diag');
     if (!el || !diag.lines.length) return;
-    el.innerHTML = '<details><summary>Diagnostics</summary><div class="diag-body">'
+    el.innerHTML = '<details open><summary>Diagnostics</summary><div class="diag-body">'
       + diag.lines.map(function (l) {
           return '<div class="diag-row"><span>' + esc(l[0]) + '</span><b>'
                + esc(l[1]) + '</b></div>';
@@ -190,11 +216,16 @@
         if (!state.invoice || !state.invoice.invoice_id) throw new Error('No invoice in context.');
         $('invoice-no').textContent = state.invoice.invoice_number || '';
 
-        note('SDK invoice keys', Object.keys(state.invoice).length);
-        note('einvoice_details in context',
-             state.invoice.einvoice_details ? 'yes' : 'NO');
+        var ikeys = Object.keys(state.invoice);
+        note('invoice keys returned', ikeys.length);
+        note('einvoice_details present', state.invoice.einvoice_details ? 'YES' : 'NO');
         if (state.invoice.einvoice_details) {
-          note('  its keys', Object.keys(state.invoice.einvoice_details).join(', '));
+          note('einvoice_details keys',
+               Object.keys(state.invoice.einvoice_details).join(', '));
+        } else {
+          // Which keys DID come back tells us whether this is the full record
+          // or an abridged one, and that decides whether an API call is needed.
+          note('keys sample', ikeys.slice(0, 30).join(', '));
         }
         note('API base tried', (ZFClient._candidateBases()[0] || '?'));
         note('host domain seen', ZFClient._hostDomain() || 'not detectable');
@@ -224,6 +255,9 @@
   function boot() {
     $('print-btn').addEventListener('click', openPrint);
     $('reload-btn').addEventListener('click', load);
+
+    probeSdk();
+    renderDiagnostics();
 
     if (!ZFClient.available()) {
       setStatus('error', 'This widget must run inside Zoho Books.');
