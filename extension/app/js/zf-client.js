@@ -60,6 +60,34 @@ var ZFClient = (function () {
   var callShape = null;   // pinned once a shape is known to work
   var shapeLog = [];
 
+  /*
+   * Render whatever a promise rejected with.
+   *
+   * The SDK rejects with plain objects and strings, not Error instances, so
+   * reading e.message discarded the reason entirely and every distinct failure
+   * was logged as the same word. The actual payload is the only thing that
+   * says what Zoho objected to.
+   */
+  function describe(e) {
+    if (e === null || e === undefined) return 'rejected with ' + String(e);
+    if (typeof e === 'string') return e;
+    if (e instanceof Error && e.message) return e.message;
+    if (e.message && typeof e.message === 'string') return e.message;
+    var parts = [];
+    ['code', 'status', 'status_code', 'statusCode', 'error', 'error_message',
+     'message', 'description', 'reason', 'details'].forEach(function (k) {
+      if (e[k] !== undefined && typeof e[k] !== 'object') parts.push(k + '=' + e[k]);
+    });
+    if (parts.length) return parts.join(' ');
+    try {
+      var j = JSON.stringify(e);
+      if (j && j !== '{}') return j.slice(0, 400);
+    } catch (err) { /* circular or hostile */ }
+    var keys = [];
+    try { for (var k2 in e) keys.push(k2); } catch (err) { /* ignore */ }
+    return keys.length ? 'object with keys: ' + keys.join(', ') : String(e);
+  }
+
   function parseBody(res) {
     var code = res && (res.status_code || res.statusCode);
     var body = res && (res.response !== undefined ? res.response : res.body);
@@ -130,9 +158,18 @@ var ZFClient = (function () {
       if (p.code && p.code >= 400) {
         var err = new Error((p.body && p.body.message) || ('Books API returned ' + p.code));
         err.statusCode = p.code;
+        err.raw = p.body;
         throw err;
       }
       return p;
+    }, function (raw) {
+      // Preserve the original payload; describe() is what finally reads it.
+      var err = new Error(describe(raw));
+      err.raw = raw;
+      if (raw && (raw.status_code || raw.statusCode)) {
+        err.statusCode = raw.status_code || raw.statusCode;
+      }
+      throw err;
     });
   }
 
@@ -181,8 +218,8 @@ var ZFClient = (function () {
           callShape = shape.name;
           resolve(p.body);
         }).catch(function (e) {
-          shapeLog.push(shape.name + ': ' + (e.message || 'failed'));
-          errors.push(shape.name + ' - ' + (e.message || 'failed'));
+          shapeLog.push(shape.name + ': ' + describe(e));
+          errors.push(shape.name + ' - ' + describe(e));
           // An HTTP status means the call reached Books and it objected; that
           // is a real answer and worth surfacing over a pile of timeouts.
           if (e.statusCode && !settled) {
@@ -245,8 +282,8 @@ var ZFClient = (function () {
           callShape = 'getRecord/' + shape.name;
           resolve(body);
         }).catch(function (e) {
-          shapeLog.push('getRecord/' + shape.name + ': ' + (e.message || 'failed'));
-          errs.push(shape.name + ' - ' + (e.message || 'failed'));
+          shapeLog.push('getRecord/' + shape.name + ': ' + describe(e));
+          errs.push(shape.name + ' - ' + describe(e));
           if (--pending === 0 && !settled) {
             settled = true;
             reject(new Error('getRecord refused every form (' + errs.join('; ') + ')'));
@@ -311,6 +348,7 @@ var ZFClient = (function () {
     API: API,
     _shapeLog: function () { return shapeLog; },
     _callShape: function () { return callShape; },
-    _shapes: shapesFor
+    _shapes: shapesFor,
+    _describe: describe
   };
 })();

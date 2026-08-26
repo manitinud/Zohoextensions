@@ -96,6 +96,23 @@ ok('a bare shape is the last resort',
    && shapes[shapes.length - 1].arg.invoice_id === undefined);
 ok('every shape is named for reporting', shapes.every(s => typeof s.name === 'string'));
 
+console.log('\nZFClient.describe — rejection payloads the SDK actually uses');
+// The SDK rejects with plain objects and strings, never Error instances, so
+// reading .message threw the reason away and every failure logged identically.
+const d = ZFC._describe;
+ok('plain string reason', d('invalid parameters') === 'invalid parameters');
+ok('Error instance', d(new Error('boom')) === 'boom');
+ok('object with message', d({ message: 'no such configuration' }) === 'no such configuration');
+ok('object with code and error',
+   /code=57/.test(d({ code: 57, error: 'not authorized' })), d({ code: 57, error: 'not authorized' }));
+ok('object with status_code', /status_code=401/.test(d({ status_code: 401 })));
+ok('unknown object falls back to JSON',
+   /"foo"/.test(d({ foo: 'bar' })), d({ foo: 'bar' }));
+ok('empty object still says something', d({}).length > 0, d({}));
+ok('undefined handled', /undefined/.test(d(undefined)), d(undefined));
+ok('null handled', /null/.test(d(null)), d(null));
+ok('never returns the bare word failed', d({ a: 1 }) !== 'failed');
+
 console.log('\nAPI configuration keys');
 ok('details config named', /^ac__.+getinvoice$/.test(ZFC.API.invoice), ZFC.API.invoice);
 ok('pdf config named', /^ac__.+getinvoicepdf$/.test(ZFC.API.invoicePdf), ZFC.API.invoicePdf);
