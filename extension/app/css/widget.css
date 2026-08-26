@@ -1,0 +1,108 @@
+/* Deliberately close to the Zoho Books UI so the widget reads as part of the page. */
+:root {
+  --fg: #23272b;
+  --muted: #7a828a;
+  --line: #e1e5e9;
+  --blue: #1e6bb8;
+  --ok-bg: #e8f5ed; --ok-fg: #1a7f45;
+  --warn-bg: #fdf3e0; --warn-fg: #9a6300;
+  --err-bg: #fdeaea; --err-fg: #b3261e;
+  --info-bg: #eef4fb; --info-fg: #1e6bb8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 13px/1.5 "Helvetica Neue", Arial, sans-serif;
+  color: var(--fg);
+  background: #fff;
+}
+
+.panel { padding: 12px 14px; }
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.panel-head h1 { font-size: 14px; font-weight: 600; margin: 0; }
+.inv-no { font-size: 12px; color: var(--muted); }
+
+.status {
+  border-radius: 3px;
+  padding: 7px 9px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.status--info  { background: var(--info-bg); color: var(--info-fg); }
+.status--ok    { background: var(--ok-bg);   color: var(--ok-fg); }
+.status--warn  { background: var(--warn-bg); color: var(--warn-fg); }
+.status--error { background: var(--err-bg);  color: var(--err-fg); }
+
+.body { display: flex; gap: 12px; align-items: flex-start; }
+.details { flex: 1 1 auto; min-width: 0; }
+
+.kv { display: flex; gap: 8px; padding: 3px 0; font-size: 12px; }
+.kv-k { flex: 0 0 74px; color: var(--muted); }
+.kv-v { flex: 1 1 auto; min-width: 0; word-break: break-all; }
+
+.mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; }
+.muted { color: var(--muted); font-style: italic; }
+.ok { color: var(--ok-fg); }
+.warn { color: var(--warn-fg); }
+
+.qr-preview { flex: 0 0 auto; }
+.qr-preview img {
+  width: 104px;
+  height: auto;
+  border: 1px solid var(--line);
+  image-rendering: pixelated;
+}
+
+.actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.btn {
+  border: 1px solid #c4cad0;
+  background: #fff;
+  color: var(--fg);
+  border-radius: 3px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: #f4f6f8; }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #185a9c; }
+
+.hint { font-size: 11px; color: var(--muted); margin: 10px 0 0; }
+
+/* --- settings page --- */
+.settings { max-width: 620px; padding: 16px 18px; }
+.settings h2 { font-size: 13px; margin: 18px 0 8px; }
+.settings h2:first-of-type { margin-top: 8px; }
+.field { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+.field label { flex: 0 0 168px; color: var(--muted); }
+.field input[type="text"], .field select {
+  flex: 1 1 auto;
+  border: 1px solid #c4cad0;
+  border-radius: 3px;
+  padding: 5px 7px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.checks { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; margin-bottom: 8px; }
+.checks label { display: flex; align-items: center; gap: 5px; color: var(--fg); }
+.note {
+  font-size: 11px;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+  padding-left: 9px;
+  margin: 6px 0 14px;
+}

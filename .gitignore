@@ -1,0 +1,6 @@
+node_modules/
+test/out.html
+test/out-multipage.pdf
+test/preview.pdf
+test/preview-page*.png
+*.zip

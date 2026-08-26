@@ -1,0 +1,71 @@
+{
+  "invoice_id": "4040395000000201073",
+  "invoice_number": "INV/26-27/00123",
+  "date": "2026-08-26",
+  "due_date": "2026-08-26",
+  "customer_name": "Metro Cash And Carry India Limited - TOSL",
+  "reference_number": "5115647597",
+  "status": "sent",
+  "currency_code": "INR",
+  "currency_symbol": "₹",
+  "place_of_supply": "KA",
+  "gst_no": "29AACCM4684P1ZN",
+  "gst_treatment": "business_gst",
+  "is_reverse_charge_applied": false,
+  "notes": "Goods once sold will not be taken back.",
+  "terms": "Payment due on receipt.",
+  "billing_address": {
+    "address": "No. 18/1, 18/2, Kanakapura Road,",
+    "street2": "",
+    "city": "Bangalore",
+    "state": "Karnataka",
+    "zip": "560062",
+    "country": "India",
+    "phone": ""
+  },
+  "shipping_address": {
+    "address": "No. 18/1, 18/2, Kanakapura Road,",
+    "street2": "",
+    "city": "Bangalore",
+    "state": "Karnataka",
+    "zip": "560062",
+    "country": "India",
+    "phone": ""
+  },
+  "line_items": [
+    {
+      "line_item_id": "4040395000000201074",
+      "name": "Sofy BDYFT XL6 35*48",
+      "description": "Article No.491089755",
+      "hsn_or_sac": "96190010",
+      "unit": "box",
+      "quantity": 30,
+      "rate": 1243.2,
+      "tax_percentage": 12,
+      "item_total": 37296
+    },
+    {
+      "line_item_id": "4040395000000201075",
+      "name": "Whisper Ultra Clean XL 30s",
+      "description": "",
+      "hsn_or_sac": "96190010",
+      "unit": "box",
+      "quantity": 12,
+      "rate": 980,
+      "tax_percentage": 12,
+      "item_total": 11760
+    }
+  ],
+  "taxes": [
+    { "tax_name": "CGST (6%)", "tax_amount": 2943.36 },
+    { "tax_name": "SGST (6%)", "tax_amount": 2943.36 }
+  ],
+  "sub_total": 49056,
+  "discount_total": 0,
+  "tax_total": 5886.72,
+  "shipping_charge": 0,
+  "adjustment": 0,
+  "roundoff_value": 0.28,
+  "total": 37296,
+  "balance": 37296
+}

@@ -1,0 +1,25 @@
+{
+  "locale": ["en"],
+  "service": "ZOHOBOOKS",
+  "sdkVersion": "1.0.0",
+  "modules": {
+    "widgets": [
+      {
+        "name": "einvoice_print_invoice",
+        "logo": "app/img/logo.png",
+        "url": "/app/index.html",
+        "location": "invoice.details.rightpanel"
+      },
+      {
+        "name": "einvoice_print_settings",
+        "logo": "app/img/logo.png",
+        "url": "/app/settings.html",
+        "location": "settings.custom"
+      }
+    ]
+  },
+  "storage": true,
+  "config": [],
+  "connectors": [],
+  "whiteListedDomains": []
+}
