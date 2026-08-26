@@ -1,11 +1,15 @@
 /*
  * Invoice-detail widget controller.
  *
- * Reads the invoice in context, resolves its e-invoice details, previews what
- * will print, and opens the print document on demand.
+ * Flow, with no configuration anywhere in it: take the invoice in context, read
+ * the e-invoice record Zoho Books already holds for it, fetch the QR image Books
+ * issued, build the print document.
  */
 (function () {
-  var state = { invoice: null, org: null, einvoice: null, settings: null, qr: null, qrError: null };
+  var state = {
+    invoice: null, org: null, einvoice: null, settings: null,
+    qr: null   // { dataUri, remoteUrl, inlined, error }
+  };
 
   function $(id) { return document.getElementById(id); }
 
@@ -15,55 +19,40 @@
     el.textContent = text;
   }
 
-  function row(label, value, mono) {
-    if (!value) return '';
-    return '<div class="kv"><span class="kv-k">' + label + '</span>'
-      + '<span class="kv-v' + (mono ? ' mono' : '') + '">' + value + '</span></div>';
-  }
-
-  function escapeHtml(s) {
+  function esc(s) {
     return String(s === null || s === undefined ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  function renderDetails() {
-    var d = state.einvoice;
-    var html = ''
-      + row('IRN', d.irn ? escapeHtml(d.irn) : '<em class="muted">not found</em>', !!d.irn)
-      + row('Ack No.', d.ackNo ? escapeHtml(d.ackNo) : '<em class="muted">not found</em>', !!d.ackNo)
-      + row('Ack Date', d.ackDate ? escapeHtml(d.ackDate) : '<em class="muted">not found</em>')
-      + row('Signed QR', state.qr
-          ? '<span class="ok">present (' + QR.byteLength(d.signedQr) + ' bytes, '
-            + state.qr.modules + '&times;' + state.qr.modules + ' modules)</span>'
-          : '<span class="warn">' + escapeHtml(state.qrError || 'not found') + '</span>');
-    $('details').innerHTML = html;
-
-    if (state.qr) {
-      $('qr-preview').innerHTML = '<img alt="e-Invoice QR preview" src="' + state.qr.dataUri + '">';
-    } else {
-      $('qr-preview').innerHTML = '';
-    }
+  function row(label, valueHtml, mono) {
+    return '<div class="kv"><span class="kv-k">' + label + '</span>'
+      + '<span class="kv-v' + (mono ? ' mono' : '') + '">' + valueHtml + '</span></div>';
   }
 
-  /*
-   * The signed QR is the only field that cannot be reconstructed locally - it is
-   * the IRP's signature over the invoice. If it is missing we still allow the
-   * print (the IRN and Ack are useful on their own) but say so plainly, because
-   * a QR-less e-invoice print is not a compliant one.
-   */
-  function buildQr() {
-    state.qr = null;
-    state.qrError = null;
-    var payload = state.einvoice.signedQr;
-    if (!payload) {
-      state.qrError = 'No signed QR on record';
-      return;
+  function missing() { return '<em class="muted">not recorded</em>'; }
+
+  function renderDetails() {
+    var d = state.einvoice;
+    var qrCell;
+    if (state.qr && state.qr.dataUri) {
+      qrCell = '<span class="ok">embedded in print</span>';
+    } else if (state.qr && state.qr.remoteUrl) {
+      qrCell = '<span class="warn">linked from Zoho Books</span>';
+    } else {
+      qrCell = missing();
     }
-    try {
-      state.qr = QR.toDataUri(payload, state.settings.qrSizePx, state.settings.qrEcLevel);
-    } catch (e) {
-      state.qrError = e.message;
-    }
+
+    $('details').innerHTML =
+        row('IRN', d.irn ? esc(d.irn) : missing(), !!d.irn)
+      + row('Ack No.', d.ackNo ? esc(d.ackNo) : missing(), !!d.ackNo)
+      + row('Ack Date', d.ackDate ? esc(d.ackDate) : missing())
+      + row('Status', d.status ? esc(d.status) : missing())
+      + row('QR', qrCell);
+
+    var src = state.qr && (state.qr.dataUri || state.qr.remoteUrl);
+    $('qr-preview').innerHTML = src
+      ? '<img alt="e-Invoice QR preview" src="' + src + '">'
+      : '';
   }
 
   function openPrint() {
@@ -72,7 +61,8 @@
       org: state.org,
       einvoice: state.einvoice,
       qrDataUri: state.qr ? state.qr.dataUri : null,
-      qrError: state.qrError,
+      qrRemoteUrl: state.qr ? state.qr.remoteUrl : null,
+      qrError: state.qr ? state.qr.error : null,
       settings: state.settings,
       docTitle: state.einvoice.irn ? 'Tax Invoice (e-Invoice)' : 'Tax Invoice'
     });
@@ -86,51 +76,61 @@
     w.document.open();
     w.document.write(html);
     w.document.close();
-    // Let layout settle so the repeating header measures correctly before print.
-    w.onload = function () { setTimeout(function () { w.focus(); w.print(); }, 250); };
+    // Let images decode and the repeating header measure before printing.
+    w.onload = function () { setTimeout(function () { w.focus(); w.print(); }, 350); };
   }
 
-  function fit() {
-    ZFClient.resize(document.body.scrollHeight + 16);
+  function fit() { ZFClient.resize(document.body.scrollHeight + 16); }
+
+  function report() {
+    var d = state.einvoice;
+
+    if (!d.irn && !d.ackNo && !d.qrLink) {
+      setStatus('warn', 'Zoho Books has no e-invoice record for this invoice. It may not have '
+        + 'been pushed to the IRP, or it may be a document type that is not e-invoiced.');
+      return;
+    }
+    if (!state.qr || (!state.qr.dataUri && !state.qr.remoteUrl)) {
+      setStatus('warn', 'IRN found, but Books returned no QR for this e-invoice. The printed '
+        + 'copy will carry the IRN and Ack details without a QR code.');
+      return;
+    }
+    if (!state.qr.dataUri) {
+      setStatus('warn', 'Ready. The QR is linked from Zoho Books rather than embedded, so a '
+        + 'saved PDF will only show it while you are signed in to Books.');
+      return;
+    }
+    setStatus('ok', 'e-Invoice details loaded from Zoho Books. Ready to print.');
   }
 
   function load() {
-    setStatus('info', 'Loading invoice…');
-    return Promise.all([
-      ZFClient.getInvoice(),
-      ZFClient.getOrganization(),
-      EIStorage.load()
-    ]).then(function (res) {
-      state.invoice = res[0];
-      state.org = res[1];
-      state.settings = res[2];
-      if (!state.invoice || !state.invoice.invoice_id) {
-        throw new Error('No invoice in context.');
-      }
-      $('invoice-no').textContent = state.invoice.invoice_number || '';
-      return EInvoice.resolve(state.invoice, state.settings);
-    }).then(function (d) {
-      state.einvoice = d;
-      buildQr();
-      renderDetails();
+    setStatus('info', 'Reading e-invoice details from Zoho Books…');
+    $('print-btn').disabled = true;
 
-      if (!d.irn && !d.signedQr) {
-        setStatus('warn', 'No e-invoice details found for this invoice. Check the source '
-          + 'settings, or confirm the invoice was actually reported to the IRP.');
+    return Promise.all([ZFClient.getInvoice(), ZFClient.getOrganization(), EIStorage.load()])
+      .then(function (res) {
+        state.invoice = res[0];
+        state.org = res[1];
+        state.settings = res[2];
+        if (!state.invoice || !state.invoice.invoice_id) throw new Error('No invoice in context.');
+        $('invoice-no').textContent = state.invoice.invoice_number || '';
+        return EInvoice.resolve(state.invoice);
+      })
+      .then(function (d) {
+        state.einvoice = d;
+        return QRImage.fetchQr(d.qrLink);
+      })
+      .then(function (qr) {
+        state.qr = qr;
+        renderDetails();
+        report();
         $('print-btn').disabled = false;
-      } else if (!state.qr) {
-        setStatus('warn', 'IRN found, but no signed QR - the printed copy will not carry a '
-          + 'scannable QR code.');
-        $('print-btn').disabled = false;
-      } else {
-        setStatus('ok', 'e-Invoice details ready.');
-        $('print-btn').disabled = false;
-      }
-      fit();
-    }).catch(function (err) {
-      setStatus('error', err.message || String(err));
-      fit();
-    });
+        fit();
+      })
+      .catch(function (err) {
+        setStatus('error', err.message || String(err));
+        fit();
+      });
   }
 
   function boot() {
@@ -146,9 +146,6 @@
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();

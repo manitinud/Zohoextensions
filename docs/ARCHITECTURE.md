@@ -3,7 +3,8 @@
 ## The problem
 
 Print an already-completed Zoho Books invoice as an e-invoice copy, with the QR
-code and e-invoice details visible in the header of **every** page.
+code and e-invoice details visible in the header of **every** page — pulling
+everything from the e-invoice Books has already filed, with no data entry.
 
 ## Why this is not a template change
 
@@ -15,33 +16,30 @@ reasons:
    widgets, custom buttons, custom functions and API access. The invoice PDF is
    produced by Books' own template engine, which is not an extension surface.
    There is no hook that injects markup into it.
-2. **Even by hand, the template puts the e-invoice block once.** Zoho Books does
-   support showing e-invoice details and the QR on the invoice template when the
-   org pushes e-invoices through Books — but as a block in the document body, not
-   as a repeating page header. An org that only needs the QR once already has
-   this natively and needs no extension.
+2. **Even by hand, the template places the e-invoice block once.** Books does
+   support showing e-invoice details and the QR on the template — but as a block
+   in the document body, not as a repeating page header.
 
-So the requirement "on every page" forces the extension to own the layout. That
-is the central design decision here, and everything else follows from it.
+So "on every page" forces the extension to own the layout. That is the central
+design decision, and everything else follows from it.
 
 ## The shape that results
 
 ```
 Books invoice detail page
         │
-        │  ZFAPPS.get('invoice')          invoice already in widget context
+        │  ZFAPPS.get('invoice')             invoice already in widget context
         ▼
   ┌───────────────┐
   │  widget panel │
   └───────┬───────┘
-          │  einvoice.js  ── resolve IRN / Ack / signed QR
-          │                    ├─ invoice.einvoice_details        (Books)
-          │                    ├─ GET /invoices/{id}/einvoice     (Books, IRP-shaped)
-          │                    └─ invoice custom fields           (external IRN)
+          │  einvoice.js   ── read invoice.einvoice_details
+          │                    (re-read via API if the context copy is abridged)
           │
-          │  qr.js        ── signed QR (JWS) → PNG data URI
+          │  qr-image.js   ── GET einvoice_details.qr_link through the ZFAPPS
+          │                    proxy → inline as a data URI
           │
-          │  print-doc.js ── self-contained HTML document
+          │  print-doc.js  ── self-contained HTML document
           ▼
    window.open() → browser print dialog → printer or Save as PDF
 ```
@@ -62,73 +60,69 @@ Print engines repeat `thead` rows at the top of each page a table breaks onto.
 This was chosen over `position: fixed`, which several engines paint only on the
 first page, and over `@page` margin boxes, which cannot hold an image.
 
-This is verified, not assumed: `test/verify-print.js` renders a 70-line-item
-invoice to PDF in Chromium, extracts the text of each page, and asserts the IRN
-and Ack No. appear on all of them.
+Verified, not assumed: `test/verify-print.js` renders a 70-line-item invoice to
+PDF in Chromium, extracts the text of each page, and asserts the IRN and Ack No.
+appear on all of them.
 
-## Resolving e-invoice fields
+## Reading the e-invoice
 
-The same four values arrive under different key styles depending on where they
-come from:
+There is exactly one source: the `einvoice_details` object Books writes onto the
+invoice when it is pushed to the IRP. Confirmed live:
 
-| Source | Key style | Example |
-| --- | --- | --- |
-| `invoice.einvoice_details` | Books snake_case | `irn_number`, `ack_number` |
-| `GET /invoices/{id}/einvoice` | IRP PascalCase | `Irn`, `AckNo`, `AckDt`, `SignedQRCode` |
-| invoice custom fields | whatever the org chose | `cf_irn`, `cf_signed_qr` |
+```json
+{
+  "is_cancellable": false,
+  "inv_ref_num": "53801fe38316ea9f7eb31b1a0074f8952378ba1eb4aa6b5c46815a92f95d5ff0",
+  "status_formatted": "Pushed",
+  "ack_number": "152625262386743",
+  "qr_link": "https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c…",
+  "status": "pushed",
+  "formatted_status": "Pushed",
+  "ack_date": "2026-04-02 11:18:00"
+}
+```
 
-Rather than hard-coding one key per source, `einvoice.js` gives each field a list
-of aliases and walks the response looking for them — normalising case and
-punctuation, descending through nested objects and single-element arrays, capped
-at five levels deep. Direct hits at a level win over nested ones, so a stale
-nested copy never shadows the current value.
+Field mapping:
 
-This is deliberate defensiveness: the exact key names Books returns for
-e-invoices could not be confirmed against a live e-invoiced org while building
-this (`www.zoho.com` and `help.zoho.com` are unreachable from the build
-environment, and the orgs reachable through the API had no e-invoiced documents).
-The alias approach means the extension works across all the plausible shapes
-instead of betting on one. If it ever fails to find a field on real data, adding
-the observed key to the relevant `ALIASES` array is a one-line fix.
+| Printed as | Books key |
+| --- | --- |
+| IRN | `inv_ref_num` |
+| Ack No. | `ack_number` |
+| Ack Date | `ack_date` |
+| e-Invoice status | `status_formatted`, falling back to `status` |
+| QR image | `qr_link` |
 
-The dedicated `/einvoice` endpoint is only called when the invoice object alone
-did not yield a signed QR, since on a non-e-invoiced invoice it returns an error
-rather than an empty body — an expected outcome, so it is swallowed rather than
-surfaced as a failure.
+`einvoice.js` accepts a couple of alternate names per field (`irn`, `irn_number`
+and so on). That is not hedging about the shape above — it is confirmed. It is
+because Books runs per data centre and the invoice-*list* payload already returns
+a trimmed version of this object, without `qr_link`. A cheap alias list costs
+nothing and avoids a silently blank field on a variant.
 
-## The signed QR
+For the same reason, when the invoice handed over by ZFAPPS carries no `qr_link`,
+the extension re-reads the invoice through the API before concluding there isn't
+one. The difference between "not e-invoiced" and "the context object was
+abridged" matters to what the user gets told.
 
-The QR on a GST e-invoice carries the **signed QR string**: a JWS the IRP
-returns, signed with the IRP's key, covering the invoice's key fields. It is a
-signature. It cannot be derived from the IRN or rebuilt from invoice data.
+## The QR
 
-Consequences the code honours:
+Books does not return a signed-QR string; it returns `qr_link`, a URL to an image
+it serves. So the extension fetches that image rather than encoding anything.
+This is the correct behaviour on the merits too: the QR on a GST e-invoice
+carries the IRP's signature over the invoice, and anything generated locally
+would scan and then fail validation.
 
-- If no signed QR is retrievable, the document prints with a clearly-labelled
-  placeholder saying so. It never draws a QR containing substitute content,
-  because such a QR would scan and then fail validation — worse than no QR.
-- Encoding uses error-correction level **L**, which gives the largest capacity
-  (2953 bytes). Real signed QRs run roughly 800–1500 characters, so this leaves
-  headroom. Above 2953 bytes `qr.js` raises a message naming the actual size
-  rather than letting the encoder throw something opaque.
-- The QR is rasterised at ≥3× its printed CSS size. A signed QR needs a
-  97–129 module symbol; at one device pixel per module the browser would upscale
-  a too-small image and soften the edges, which scanners handle badly.
-  Oversampling and letting CSS scale down keeps whole, sharp modules at print
-  resolution.
+The fetch goes through `ZFAPPS.request`, not the browser, for two reasons:
 
-`test/preview.js` closes the loop: it generates a QR from a realistic JWS through
-the extension's own `qr.js`, renders the document, reads the QR image back out of
-the laid-out page, and decodes it — asserting the recovered string is
-byte-identical to the input.
+- `qr_link` is cross-origin to the widget's iframe and Books sends no CORS
+  headers for it, so `fetch()` would be blocked.
+- The print document is opened in a separate window and usually saved as PDF. A
+  remote `<img src>` would leave that saved file dependent on a live Zoho session
+  to render — possibly blank months later. Inlining the bytes as a data URI keeps
+  the printed copy self-contained.
 
-## Self-containment
-
-The print document is opened in a new window and may be saved as PDF or reopened
-offline. It therefore embeds everything: styles inline, QR as a `data:` URI, no
-external requests. The QR library is vendored into the extension for the same
-reason — a CDN reference would be a runtime dependency inside a document that is
-supposed to be a permanent record.
+If the proxy fetch fails, the document falls back to referencing `qr_link`
+directly and the widget says so explicitly, rather than pretending the PDF is
+portable when it is not.
 
 ## What this design does not give you
 
@@ -136,10 +130,12 @@ Worth stating plainly, because these are the questions that come back later:
 
 - **Not the org's Books template.** The layout is this extension's. Matching a
   particular org's invoice design means editing `print-doc.js`.
-- **No server-side PDF.** Output goes through the browser's print dialog. There
-  is no headless render, so no scheduled generation and no automatic attachment
-  back onto the invoice record.
+- **No server-side PDF.** Output goes through the browser's print dialog, so no
+  scheduled generation and no automatic attachment onto the invoice record.
 - **No bulk print.** One invoice at a time, from its detail page. Bulk would mean
   a second widget on the invoice list plus batched API reads — feasible on this
   foundation, but not built.
-- **Nothing is written back to Books.** The extension is read-only by design.
+- **Invoices e-invoiced outside Books are out of scope.** If the IRN was
+  generated through a GSP or the government portal and never recorded in Books,
+  `einvoice_details` is empty and the extension says so. Reading such IRNs from
+  custom fields is a small addition to `einvoice.js` if it is ever needed.

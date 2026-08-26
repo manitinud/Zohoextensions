@@ -40,11 +40,13 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 const html = PrintDoc.build({
   invoice,
   org: { name: 'Mallikarjuna Enterprises', gst_no: '29AAAAA0000A1Z5', address: {} },
-  einvoice: { irn: IRN, ackNo: ACK, ackDate: '2026-08-26 12:42:00', signedQr: 'x'.repeat(900) },
+  einvoice: { irn: IRN, ackNo: ACK, ackDate: '2026-08-26 12:42:00', status: 'Pushed',
+              qrLink: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-abc' },
   qrDataUri: PNG,
   settings: {
-    header: { showQr: true, showIrn: true, showAck: true, showGstin: true, showPageNumbers: true },
-    qrSizePx: 150, qrEcLevel: 'L'
+    header: { showQr: true, showIrn: true, showAck: true, showGstin: true, showStatus: true,
+              showPageNumbers: true },
+    qrSizePx: 150
   },
   docTitle: 'Tax Invoice (e-Invoice)'
 });

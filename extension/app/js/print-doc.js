@@ -118,14 +118,24 @@ var PrintDoc = (function () {
     }
     rows.push('<tr><th>Invoice No.</th><td class="mono">' + esc(inv.invoice_number) + '</td></tr>');
     rows.push('<tr><th>Invoice Date</th><td>' + esc(inv.date) + '</td></tr>');
+    if (s.showStatus && d.status) {
+      rows.push('<tr><th>e-Invoice</th><td>' + esc(d.status) + '</td></tr>');
+    }
 
+    /*
+     * The QR is whatever Zoho Books issued for this e-invoice: inlined as a data
+     * URI when the bytes could be fetched, otherwise referenced by Books' own
+     * URL. Never synthesised - an e-invoice QR is an IRP signature.
+     */
     var qrCell = '';
     if (s.showQr) {
-      qrCell = ctx.qrDataUri
-        ? '<div class="qr-wrap"><img class="qr" alt="e-Invoice QR code" src="' + ctx.qrDataUri + '">'
+      var qrSrc = ctx.qrDataUri || ctx.qrRemoteUrl;
+      qrCell = qrSrc
+        ? '<div class="qr-wrap"><img class="qr" alt="e-Invoice QR code" src="' + qrSrc + '">'
           + '<div class="qr-caption">e-Invoice QR</div></div>'
         : '<div class="qr-wrap qr-missing"><div class="qr-placeholder">QR unavailable</div>'
-          + '<div class="qr-caption">' + esc(ctx.qrError || 'No signed QR on record') + '</div></div>';
+          + '<div class="qr-caption">' + esc(ctx.qrError || 'No e-invoice QR on record')
+          + '</div></div>';
     }
 
     return ''

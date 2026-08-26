@@ -32,33 +32,30 @@ from the `organization_id` in the URL.
 
 ### First-run configuration
 
-One setting usually needs attention before the first print.
+None. Open an invoice and print it.
 
-**Settings → Extensions & Developer Data → Installed Extensions → e-Invoice
-Print → Settings.**
+The IRN, Ack No., Ack Date, status and QR are read from the e-invoice Zoho Books
+already filed against the invoice when it was pushed to the IRP. There is no data
+source to pick and nothing to map.
 
-- **Source** — where IRN / Ack / signed QR come from:
-  - *Zoho Books e-invoicing only* — the org pushes invoices to the IRP through
-    Books. Nothing else to configure.
-  - *Custom fields only* — the IRN was generated elsewhere (a GSP, the
-    government portal, a migration) and parked on the invoice as custom fields.
-    Fill in the four API names below.
-  - *Zoho Books first, then custom fields* — the default; useful when an org has
-    a mix of both, e.g. historical invoices imported with their IRNs plus new
-    ones pushed through Books.
-- **Custom field API names** — use the *API name*, not the label. Find them under
-  **Settings → Preferences → Invoices → Field Customization**. The signed-QR
-  field must hold the complete JWS string the IRP returned; a truncated field
-  produces a QR that will not validate.
-- **Repeating page header** — which rows appear in the band on every page.
+The one settings page the extension does have — **Settings → Extensions &
+Developer Data → Installed Extensions → e-Invoice Print → Settings** — only
+controls appearance: which rows show in the repeating band, and how wide the QR
+prints. The defaults are sensible; most orgs never open it.
 
 ### Using it
 
 Open a completed invoice → **e-Invoice Print** panel → **Print e-Invoice**.
 
-The panel states what it found before you print. If it says the signed QR is
-missing, the printed copy will carry the IRN and Ack details but no scannable
-QR — fix the data rather than distributing that copy as a compliant e-invoice.
+The panel states what it found before you print:
+
+- *e-Invoice details loaded from Zoho Books* — everything is there.
+- *Books has no e-invoice record for this invoice* — the invoice was never pushed
+  to the IRP, or it is a document type that is not e-invoiced (a bill of supply,
+  for instance). There is nothing to print an e-invoice copy from.
+- *The QR is linked rather than embedded* — the copy will print, but a saved PDF
+  will only show the QR while you are signed in to Books. Print it now, or
+  re-run it later from Books.
 
 Choose **Save as PDF** as the print destination to keep a file. Allow pop-ups for
 Zoho Books, or the print window will be blocked.
@@ -66,9 +63,10 @@ Zoho Books, or the print window will be blocked.
 ### Permissions and data
 
 The extension reads the invoice and organization through the signed-in user's own
-Books session. It stores only its own settings, per organization. It sends
-nothing to any third-party server — the QR is generated in the browser, and the
-print window is fully self-contained.
+Books session, and fetches the QR image from Zoho's own e-invoice endpoint. It
+writes nothing back to Books and stores only its own appearance settings, per
+organization. No data goes to any third-party server, and the print window makes
+no external requests once it opens.
 
 ---
 
@@ -110,15 +108,17 @@ placeholder you land on.
 ### 3. Test against a real organization
 
 Sigma's **Test** / **Preview** mode installs the extension into an org you pick.
-Use an org that actually has e-invoiced invoices — the interesting failure modes
-(missing signed QR, a key style the resolver has not seen, a very long JWS) only
-show up on real data.
+Use an org that actually has e-invoiced invoices — that is where the interesting
+cases live.
 
 Worth checking explicitly:
 
 - an invoice with 40+ line items, to see the header repeat across pages
 - an invoice that was **never** e-invoiced, to confirm the panel says so cleanly
-- an invoice whose IRN came from outside Books, with the custom-field source
+- that the QR arrives **embedded** rather than linked. If the panel reports it as
+  linked, `ZFAPPS.request` is not returning the image bytes in a shape
+  `qr-image.js` recognises; the normalisation in `QRImage.fetchQr` is the place
+  to adjust, and the printed PDF is not portable until it is fixed
 
 ### 4. Publish
 

@@ -1,4 +1,4 @@
-/* Settings widget controller. */
+/* Settings widget controller. Presentation only - no data sources to configure. */
 (function () {
   function $(id) { return document.getElementById(id); }
 
@@ -9,41 +9,29 @@
   }
 
   function apply(s) {
-    $('source').value = s.source;
-    $('f-irn').value = s.fields.irn || '';
-    $('f-ack').value = s.fields.ackNo || '';
-    $('f-ackdate').value = s.fields.ackDate || '';
-    $('f-qr').value = s.fields.signedQr || '';
     $('h-qr').checked = !!s.header.showQr;
     $('h-irn').checked = !!s.header.showIrn;
     $('h-ack').checked = !!s.header.showAck;
     $('h-gstin').checked = !!s.header.showGstin;
+    $('h-status').checked = !!s.header.showStatus;
     $('h-pages').checked = !!s.header.showPageNumbers;
     $('qr-size').value = s.qrSizePx;
-    $('qr-ec').value = s.qrEcLevel;
   }
 
   function collect() {
     var size = parseInt($('qr-size').value, 10);
     return {
-      source: $('source').value,
-      fields: {
-        irn: $('f-irn').value.trim(),
-        ackNo: $('f-ack').value.trim(),
-        ackDate: $('f-ackdate').value.trim(),
-        signedQr: $('f-qr').value.trim()
-      },
       header: {
         showQr: $('h-qr').checked,
         showIrn: $('h-irn').checked,
         showAck: $('h-ack').checked,
         showGstin: $('h-gstin').checked,
+        showStatus: $('h-status').checked,
         showPageNumbers: $('h-pages').checked
       },
       // Clamp rather than reject: an out-of-range size is a typo, not a reason
-      // to lose the rest of the form.
-      qrSizePx: isNaN(size) ? EIStorage.DEFAULTS.qrSizePx : Math.min(300, Math.max(80, size)),
-      qrEcLevel: $('qr-ec').value
+      // to throw away the rest of the form.
+      qrSizePx: isNaN(size) ? EIStorage.DEFAULTS.qrSizePx : Math.min(300, Math.max(80, size))
     };
   }
 
@@ -66,7 +54,7 @@
     });
 
     var start = ZFClient.available()
-      ? ZFClient.init().catch(function () { /* fall through to storage fallback */ })
+      ? ZFClient.init().catch(function () { /* fall through to the storage fallback */ })
       : Promise.resolve();
 
     start.then(EIStorage.load).then(function (s) {
@@ -78,9 +66,6 @@
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();

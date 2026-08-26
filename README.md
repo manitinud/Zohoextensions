@@ -4,6 +4,9 @@ A Zoho Books (Sigma) extension that prints an already-completed invoice as an
 e-invoice copy, with the **QR code and e-invoice details repeated at the top of
 every page**.
 
+Everything comes from the e-invoice Zoho Books already filed when the invoice was
+pushed to the IRP. There is nothing to configure and nothing to enter.
+
 ![Page 1](docs/img/sample-page1.png)
 
 Page 2 of the same invoice — the band repeats, it is not a first-page-only header:
@@ -13,13 +16,38 @@ Page 2 of the same invoice — the band repeats, it is not a first-page-only hea
 ## What it does
 
 - Adds a panel to the invoice detail page in Zoho Books.
-- Reads the invoice's IRN, Ack No., Ack Date and **signed QR** — from Books' own
-  e-invoicing, or from custom fields when the IRN was generated outside Books.
-- Renders the signed QR to an image and builds a printable A4 document where the
-  e-invoice band sits in a repeating page header.
-- Opens the browser print dialog; "Save as PDF" gives the customer the file.
+- Reads `einvoice_details` off the invoice: IRN, Ack No., Ack Date, status and
+  the QR image link Books issued.
+- Fetches that QR image and inlines it, so a saved PDF stays readable offline.
+- Builds a printable A4 document with the e-invoice band in a repeating page
+  header, and opens the print dialog.
 
-Nothing in Zoho Books is modified. The extension only reads.
+The extension is read-only. Nothing in Zoho Books is modified.
+
+## What Books actually returns
+
+Confirmed against a live e-invoiced organization:
+
+```json
+"einvoice_details": {
+  "inv_ref_num":      "53801fe38316ea9f7eb31b1a0074f8952378ba1eb4aa6b5c46815a92f95d5ff0",
+  "ack_number":       "152625262386743",
+  "ack_date":         "2026-04-02 11:18:00",
+  "status":           "pushed",
+  "status_formatted": "Pushed",
+  "is_cancellable":   false,
+  "qr_link":          "https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c…"
+}
+```
+
+Two details that drive the implementation:
+
+- **The IRN is `inv_ref_num`**, not `irn` — Books names it after the GST term
+  "Invoice Reference Number". Reading `irn` returns nothing.
+- **There is no signed-QR string.** Books exposes the QR as an image URL it
+  serves itself. So the extension *fetches* the QR; it never generates one.
+  That is the right outcome regardless — an e-invoice QR is an IRP signature,
+  and anything generated locally would scan but fail validation.
 
 ## The one constraint worth knowing up front
 
@@ -34,35 +62,19 @@ Practical consequences:
 - The printed copy is this extension's layout, not the org's Books template. If a
   customer needs their exact Books template design, the layout in
   `extension/app/js/print-doc.js` has to be matched to it.
-- Output goes through the browser's print dialog. There is no silent
-  server-side PDF generation and no automatic attachment to the invoice record.
-- If the org already pushes e-invoices through Zoho Books **and** is happy with
-  the QR appearing once, Books does that natively and no extension is needed.
-  The gap this fills is the *every page* requirement, and IRNs generated outside
-  Books.
+- Output goes through the browser's print dialog. There is no server-side PDF
+  generation and no automatic attachment back onto the invoice record.
+- If an org is content with the QR appearing once, Books does that natively and
+  no extension is needed. The gap this fills is the *every page* requirement.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the reasoning in full.
 
-## The signed QR cannot be faked
-
-The QR on a GST e-invoice must contain the **signed QR string** (a JWS) returned
-by the IRP. It is a signature over the invoice and cannot be reconstructed from
-the IRN, the invoice number, or anything else held locally.
-
-So: if the signed QR is not retrievable for an invoice, the extension prints the
-IRN and Ack details and says plainly that the QR is missing, rather than drawing
-a QR that would not validate. Getting the signed QR onto invoices whose IRN was
-generated outside Books is a data problem to solve before printing — see the
-custom-field settings in the extension.
-
 ## Installing
 
-Two different audiences, two different documents:
-
 - **A customer installing the published extension** — a few clicks from
-  Settings. See [docs/INSTALL.md](docs/INSTALL.md#for-the-customer).
+  Settings, then it works. See [docs/INSTALL.md](docs/INSTALL.md#for-the-customer).
 - **You, publishing it from Sigma** — build, test in a real org, then publish
-  either privately (a link for named orgs) or to the public marketplace. See
+  privately (a link for named orgs) or to the public marketplace. See
   [docs/INSTALL.md](docs/INSTALL.md#for-the-publisher).
 
 ## Repository layout
@@ -72,17 +84,16 @@ extension/
   plugin-manifest.json      widget registration
   app/
     index.html              invoice-detail widget
-    settings.html           per-organization settings
+    settings.html           print appearance only — no data setup
     css/widget.css
     js/
-      app.js                invoice widget controller
+      app.js                widget controller
       settings.js           settings controller
       zf-client.js          ZFAPPS SDK wrapper (invoice, org, Books API)
-      einvoice.js           resolves IRN/Ack/signed QR across key styles
-      qr.js                 signed QR -> PNG data URI
+      einvoice.js           reads einvoice_details off the invoice
+      qr-image.js           fetches Books' QR image, inlines it as a data URI
       print-doc.js          builds the printable document
-      storage.js            per-org settings persistence
-      vendor-qrcode*.js     qrcode-generator 2.0.4 (MIT, Kazuhiko Arase)
+      storage.js            per-org appearance settings
 docs/
 test/
 ```
@@ -90,21 +101,14 @@ test/
 ## Tests
 
 ```
-node test/run.js          # 31 assertions: number-to-words, Indian digit grouping,
-                          # e-invoice field resolution, document structure, escaping
+node test/run.js          # 43 assertions, including the real einvoice_details
+                          # payload from a live org, number-to-words, Indian digit
+                          # grouping, QR fallback behaviour and HTML escaping
 node test/verify-print.js # renders a 70-line invoice to PDF in Chromium and asserts
                           # the e-invoice band lands on every page
-node test/preview.js      # end-to-end: real QR through qr.js, decoded back out of
-                          # the rendered page, page images written to test/
+node test/preview.js      # writes page images to test/ for eyeballing the layout
 ```
 
-`verify-print.js` and `preview.js` need Playwright and pdf.js. They are the
-checks that matter — the repeating header and the QR surviving print are the two
-claims this extension lives or dies by, and both are verified rather than assumed.
-
-## Licence notes
-
-`extension/app/js/vendor-qrcode.js` and `vendor-qrcode-utf8.js` are
-[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0.4 by
-Kazuhiko Arase, MIT licensed, vendored unmodified. They are bundled rather than
-loaded from a CDN because the print window must render with no network access.
+`verify-print.js` is the check that matters most: the repeating header is the
+claim this extension lives or dies by, so it is verified against real pagination
+rather than assumed. It needs Playwright; `preview.js` also needs pdf.js.

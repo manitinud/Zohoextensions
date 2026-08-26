@@ -10,36 +10,10 @@
   <div class="settings">
     <div class="status status--info" id="status">Loading…</div>
 
-    <h2>Where do the e-invoice details come from?</h2>
-    <div class="field">
-      <label for="source">Source</label>
-      <select id="source">
-        <option value="auto">Zoho Books first, then custom fields</option>
-        <option value="books">Zoho Books e-invoicing only</option>
-        <option value="custom">Custom fields only</option>
-      </select>
-    </div>
     <p class="note">
-      Pick <strong>Zoho Books e-invoicing only</strong> if this organization pushes invoices to
-      the IRP through Books. Pick <strong>Custom fields only</strong> if the IRN was generated
-      elsewhere (a GSP, the government portal, or an import) and the values were stored against
-      the invoice as custom fields.
-    </p>
-
-    <h2>Custom field API names</h2>
-    <div class="field"><label for="f-irn">IRN</label>
-      <input type="text" id="f-irn" placeholder="cf_irn"></div>
-    <div class="field"><label for="f-ack">Ack No.</label>
-      <input type="text" id="f-ack" placeholder="cf_ack_no"></div>
-    <div class="field"><label for="f-ackdate">Ack Date</label>
-      <input type="text" id="f-ackdate" placeholder="cf_ack_date"></div>
-    <div class="field"><label for="f-qr">Signed QR string</label>
-      <input type="text" id="f-qr" placeholder="cf_signed_qr"></div>
-    <p class="note">
-      Use the field's <em>API name</em>, not its label — find it under
-      Settings &rsaquo; Preferences &rsaquo; Invoices &rsaquo; Field Customization. The signed QR
-      field must hold the full JWS string returned by the IRP; it cannot be reconstructed from
-      the IRN.
+      There is nothing to set up. The IRN, Ack No., Ack Date and QR code are read from the
+      e-invoice Zoho Books already filed against each invoice when it was pushed to the IRP.
+      The settings below only change how the printed page looks.
     </p>
 
     <h2>Repeating page header</h2>
@@ -48,24 +22,22 @@
       <label><input type="checkbox" id="h-irn"> IRN</label>
       <label><input type="checkbox" id="h-ack"> Ack No. &amp; Date</label>
       <label><input type="checkbox" id="h-gstin"> GSTINs</label>
+      <label><input type="checkbox" id="h-status"> e-Invoice status</label>
       <label><input type="checkbox" id="h-pages"> Page footer line</label>
     </div>
+    <p class="note">
+      Whatever is ticked here appears in the band at the top of <em>every</em> printed page,
+      not just the first.
+    </p>
 
-    <h2>QR rendering</h2>
+    <h2>QR size</h2>
     <div class="field">
-      <label for="qr-size">Printed size (px)</label>
+      <label for="qr-size">Printed width (px)</label>
       <input type="text" id="qr-size" placeholder="150">
     </div>
-    <div class="field">
-      <label for="qr-ec">Error correction</label>
-      <select id="qr-ec">
-        <option value="L">L — highest capacity (recommended)</option>
-        <option value="M">M — more robust, lower capacity</option>
-      </select>
-    </div>
     <p class="note">
-      A signed QR is typically 800–1500 characters. Level L holds up to 2953 bytes; level M
-      holds less, so raise it only if your payloads are short and your printer output is poor.
+      Between 80 and 300. Larger scans more reliably from a printed page; smaller leaves more
+      room for the header rows beside it.
     </p>
 
     <div class="actions">

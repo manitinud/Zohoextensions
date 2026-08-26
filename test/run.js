@@ -5,10 +5,10 @@ const APP = path.join(__dirname, '..', 'extension', 'app', 'js');
 const sandbox = { console, module: {}, exports: {}, unescape, encodeURIComponent };
 sandbox.window = sandbox; sandbox.global = sandbox;
 vm.createContext(sandbox);
-for (const f of ['print-doc.js', 'einvoice.js']) {
+for (const f of ['print-doc.js', 'einvoice.js', 'qr-image.js']) {
   vm.runInContext(fs.readFileSync(path.join(APP, f), 'utf8'), sandbox, { filename: f });
 }
-const { PrintDoc, EInvoice } = sandbox;
+const { PrintDoc, EInvoice, QRImage } = sandbox;
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
@@ -31,25 +31,54 @@ ok('1000',     m(1000, '') === '1,000.00', m(1000,''));
 ok('10000000', m(10000000, '') === '1,00,00,000.00', m(10000000,''));
 ok('999.5',    m(999.5, '') === '999.50', m(999.5,''));
 
-console.log('\nEInvoice._find (alias resolution across key styles)');
-const find = EInvoice._find;
-ok('PascalCase IRP payload', find({ Irn: 'ABC123' }, ['irn','irnnumber']) === 'ABC123');
-ok('Books snake_case',       find({ irn_number: 'X9' }, ['irn','irnnumber']) === 'X9');
-ok('nested one level',       find({ einvoice: { AckNo: '112' } }, ['ackno','ack_number']) === '112');
-ok('array wrapped',          find([{ SignedQRCode: 'jws' }], ['signedqrcode']) === 'jws');
-ok('ignores empty string',   find({ Irn: '' }, ['irn']) === null);
-ok('no false positive',      find({ other: 'v' }, ['irn']) === null);
-ok('depth capped',           find({a:{b:{c:{d:{e:{f:{Irn:'deep'}}}}}}}, ['irn']) === null);
+console.log('\nEInvoice._read (against the shape Zoho Books actually returns)');
+// Verbatim einvoice_details from a live e-invoiced org (SURIE POLEX, invoice BT/25-26/1312).
+const REAL = {
+  is_cancellable: false,
+  inv_ref_num: '53801fe38316ea9f7eb31b1a0074f8952378ba1eb4aa6b5c46815a92f95d5ff0',
+  status_formatted: 'Pushed',
+  ack_number: '152625262386743',
+  qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c64ec31e38951c2c37f',
+  status: 'pushed',
+  formatted_status: 'Pushed',
+  ack_date: '2026-04-02 11:18:00'
+};
+const read = EInvoice._read(REAL);
+ok('IRN comes from inv_ref_num', read.irn === REAL.inv_ref_num, read.irn);
+ok('ack number', read.ackNo === '152625262386743', read.ackNo);
+ok('ack date', read.ackDate === '2026-04-02 11:18:00', read.ackDate);
+ok('status prefers formatted', read.status === 'Pushed', read.status);
+ok('qr link', read.qrLink === REAL.qr_link, read.qrLink);
+
+ok('list-shaped payload (no qr_link) still reads',
+   EInvoice._read({ inv_ref_num: 'X', ack_number: 'Y', ack_date: 'Z' }).qrLink === null);
+ok('alternate irn key accepted', EInvoice._read({ irn: 'ALT' }).irn === 'ALT');
+ok('empty details -> all null', EInvoice._read({}).irn === null);
+ok('undefined details -> all null', EInvoice._read(undefined).irn === null);
+ok('isEmpty true for blank', EInvoice._isEmpty(EInvoice._read({})) === true);
+ok('isEmpty false when irn present', EInvoice._isEmpty(EInvoice._read(REAL)) === false);
+
+console.log('\nQRImage._toDataUri');
+ok('passes data URIs through',
+   QRImage._toDataUri('data:image/png;base64,AAAA') === 'data:image/png;base64,AAAA');
+ok('wraps bare base64 as png',
+   QRImage._toDataUri('A'.repeat(80)).startsWith('data:image/png;base64,AAA'));
+ok('detects jpeg prefix',
+   QRImage._toDataUri('/9j/' + 'A'.repeat(80)).startsWith('data:image/jpeg;base64,'));
+ok('rejects a URL', QRImage._toDataUri('https://books.zoho.in/einvoice/qrcode?x=1') === null);
+ok('rejects empty', QRImage._toDataUri('') === null);
 
 console.log('\nPrintDoc.build');
 const invoice = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'invoice.json'), 'utf8'));
 const settings = {
-  header: { showQr: true, showIrn: true, showAck: true, showGstin: true, showPageNumbers: true },
-  qrSizePx: 150, qrEcLevel: 'L'
+  header: { showQr: true, showIrn: true, showAck: true, showGstin: true, showStatus: true,
+            showPageNumbers: true },
+  qrSizePx: 150
 };
 const einvoice = {
   irn: 'a5c12b9f8e4d7361a0b8f2c5d9e14738bc6a0f25d13e847956ab0cd2ef419a63',
-  ackNo: '112420098765432', ackDate: '2026-08-26 12:42:00', signedQr: 'x'.repeat(40)
+  ackNo: '112420098765432', ackDate: '2026-08-26 12:42:00', status: 'Pushed',
+  qrLink: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-abc'
 };
 const html = PrintDoc.build({
   invoice, org: { name: 'Mallikarjuna Enterprises', gst_no: '29AAAAA0000A1Z5', address: {} },
@@ -80,9 +109,19 @@ ok('escaped entity present', h2.includes('&lt;script&gt;'));
 
 console.log('\nmissing-QR path');
 const h3 = PrintDoc.build({ invoice, org: {}, einvoice: { irn: 'I', ackNo: null, ackDate: null,
-  signedQr: null }, qrDataUri: null, qrError: 'No signed QR on record', settings, docTitle: 'T' });
-ok('renders placeholder not a broken img', h3.includes('qr-missing') && !h3.includes('src="null"'));
-ok('states the reason', h3.includes('No signed QR on record'));
+  qrLink: null }, qrDataUri: null, qrRemoteUrl: null,
+  qrError: 'This invoice has no e-invoice QR on record.', settings, docTitle: 'T' });
+ok('renders placeholder not a broken img',
+   h3.includes('qr-wrap qr-missing') && !h3.includes('src="null"') && !h3.includes('src="undefined"'));
+ok('states the reason', h3.includes('no e-invoice QR on record'));
+
+console.log('\nQR fallback to Books-hosted URL');
+const h4 = PrintDoc.build({ invoice, org: {}, einvoice, qrDataUri: null,
+  qrRemoteUrl: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-abc', settings, docTitle: 'T' });
+ok('uses the remote URL when not inlined',
+   h4.includes('src="https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-abc"'));
+ok('no missing-QR placeholder in that case', !h4.includes('qr-wrap qr-missing'));
+ok('e-invoice status row rendered', h4.includes('Pushed'));
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
