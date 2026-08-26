@@ -36,7 +36,11 @@
    * way to reproduce it here, so the widget has to be able to report on itself.
    */
   var diag = { lines: [] };
-  function note(label, value) { diag.lines.push([label, value]); renderDiagnostics(); }
+  function note(label, value) {
+    diag.lines.push([label, value]);
+    renderDiagnostics();
+    fit();   // rows added later were being clipped by the un-resized iframe
+  }
 
   /*
    * Report what the SDK actually exposes.
@@ -54,13 +58,15 @@
     var keys = [];
     for (var k in ZFAPPS) { keys.push(k); }
     note('ZFAPPS keys', keys.sort().join(', ') || '(none enumerable)');
-    ['request', 'get', 'set', 'invoke', 'extension'].forEach(function (m) {
-      note('ZFAPPS.' + m, typeof ZFAPPS[m]);
-    });
-    if (ZFAPPS.extension) {
-      var ek = [];
-      for (var e in ZFAPPS.extension) { ek.push(e); }
-      note('ZFAPPS.extension keys', ek.sort().join(', ') || '(none enumerable)');
+    ['request', 'get', 'set', 'invoke', 'retrieve', 'store', 'API', 'linkFiles']
+      .forEach(function (m) { note('ZFAPPS.' + m, typeof ZFAPPS[m]); });
+
+    // ZFAPPS.API is an object rather than a function; whatever it exposes may be
+    // the intended route for configured API calls.
+    if (ZFAPPS.API && typeof ZFAPPS.API === 'object') {
+      var ak = [];
+      for (var a in ZFAPPS.API) { ak.push(a + '(' + (typeof ZFAPPS.API[a])[0] + ')'); }
+      note('ZFAPPS.API members', ak.sort().join(', ') || '(none enumerable)');
     }
   }
 
@@ -155,15 +161,25 @@
       });
   }
 
+  function diagText() {
+    return diag.lines.map(function (l) { return l[0] + ': ' + l[1]; }).join('\n');
+  }
+
   function renderDiagnostics() {
     var el = $('diag');
     if (!el || !diag.lines.length) return;
-    el.innerHTML = '<details open><summary>Diagnostics</summary><div class="diag-body">'
-      + diag.lines.map(function (l) {
-          return '<div class="diag-row"><span>' + esc(l[0]) + '</span><b>'
-               + esc(l[1]) + '</b></div>';
-        }).join('')
-      + '</div></details>';
+    el.innerHTML =
+        '<details open><summary>Diagnostics</summary>'
+      + '<textarea id="diag-text" class="diag-text" readonly rows="14"></textarea>'
+      + '<button type="button" class="btn diag-copy" id="diag-copy">Copy diagnostics</button>'
+      + '</details>';
+    $('diag-text').value = diagText();
+    $('diag-copy').addEventListener('click', function () {
+      var t = $('diag-text');
+      t.select();
+      try { document.execCommand('copy'); this.textContent = 'Copied'; }
+      catch (e) { this.textContent = 'Select the text above and copy'; }
+    });
   }
 
   function fit() { ZFClient.resize(document.body.scrollHeight + 16); }

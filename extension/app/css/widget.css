@@ -115,3 +115,18 @@ body {
 .diag-row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .diag-row span { color: var(--muted); }
 .diag-row b { font-weight: 500; text-align: right; word-break: break-all; }
+
+.diag-text {
+  width: 100%;
+  margin-top: 6px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 6px 7px;
+  resize: vertical;
+  background: #fafbfc;
+  color: var(--fg);
+}
+.diag-copy { margin-top: 6px; font-size: 11px; padding: 4px 9px; }
