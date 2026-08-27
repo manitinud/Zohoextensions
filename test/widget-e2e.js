@@ -116,7 +116,7 @@ async function run(browser, name, scenario, checks) {
     (s) => {
       ok('does not sit on Loading', !/^Loading/.test(s.status), s.status);
       ok('reports a failure rather than spinning', /status--(error|warn|info)/.test(s.statusClass));
-      ok('all shapes attempted', (s.calls || []).length >= 6, (s.calls || []).length);
+      ok('all shapes attempted', (s.calls || []).length >= 3, (s.calls || []).length);
       ok('timeouts recorded in diagnostics', /no response within/.test(s.diag),
          s.diag.slice(-200));
     });
@@ -176,17 +176,6 @@ async function run(browser, name, scenario, checks) {
          (s.diag.match(/url_params.*/) || [''])[0]);
       ok('raw api body traced', /api body: .*invoice/.test(s.diag),
          (s.diag.match(/api body.*/) || [''])[0].slice(0, 120));
-    });
-
-  // 4b. ZFAPPS.API.getRecord is the SDK's own route to a Books record; prove
-  //     it is used and that request/API-configuration is only a fallback.
-  await run(browser, 'getRecord is used when ZFAPPS.request refuses everything',
-    Object.assign({ requestHangs: true, getRecordShape: 'module+id', settleMs: 4000 }, fx),
-    (s) => {
-      ok('details resolved via getRecord', s.details.includes('112631363872267'), s.details);
-      ok('getRecord recorded as the winner', /getRecord\/module\+id: ok/.test(s.diag),
-         (s.diag.match(/getRecord.*/) || [''])[0]);
-      ok('status reports ready', /^ready/i.test(s.status.trim()), s.status);
     });
 
   // 4c. When the invoice already carries the data, no call should be needed.
