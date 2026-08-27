@@ -232,13 +232,15 @@ async function run(browser, name, scenario, checks) {
       ok('decoy IRN rejected', !s.details.includes('WRONG_IRN_DO_NOT_PRINT'));
     });
 
-  await run(browser, 'org reaches Books via the header channel',
-    Object.assign({ requireOrgHeader: true, requireConnection: true,
+  // The documented contract: ${url_param.organization_id} in the stored URL,
+  // value supplied at call time as a url_query {key, value} pair.
+  await run(browser, 'org reaches Books via the url_query pair',
+    Object.assign({ requireOrgQuery: true, requireConnection: true,
                     getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
-      ok('details resolved via the org header',
+      ok('details resolved via url_query',
          s.details.includes('112631363872267'), s.details);
-      ok('a header-bearing shape won', /accepted shape: conn\+org-header/.test(s.diag),
+      ok('a url_query-bearing shape won', /accepted shape: conn\+url_query/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 

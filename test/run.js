@@ -85,19 +85,21 @@ const ZFC = zbox.ZFClient;
 
 const shapes = ZFC._shapes('ac__in_test_getinvoice',
   { invoice_id: '123', invoice_number: 'INV/1', organization_id: '9' });
-ok('five shapes: two header-led plus three legacy', shapes.length === 5, shapes.length);
+ok('five shapes: two url_query-led plus three legacy', shapes.length === 5, shapes.length);
 ok('every shape carries the configuration key',
    shapes.every(x => x.arg.api_configuration_key === 'ac__in_test_getinvoice'));
-ok('the leading shape carries the Books org header',
-   shapes[0].arg.headers
-   && shapes[0].arg.headers['X-com-zoho-books-organizationid'] === '9',
+ok('the leading shape carries a url_query pair array',
+   Array.isArray(shapes[0].arg.url_query)
+   && shapes[0].arg.url_query.some(p => p.key === 'organization_id' && p.value === '9'),
    JSON.stringify(shapes[0].arg));
-ok('a header+url_params combination is tried',
-   shapes.some(x => x.arg.headers && x.arg.url_params
+ok('url_query values are strings',
+   shapes[0].arg.url_query.every(p => typeof p.value === 'string'));
+ok('a url_query+url_params combination is tried',
+   shapes.some(x => Array.isArray(x.arg.url_query) && x.arg.url_params
                     && x.arg.url_params.invoice_number === 'INV/1'));
-ok('legacy flat shape remains', shapes.some(x => x.arg.invoice_id === '123' && !x.arg.headers));
-ok('no header shapes without an org id',
-   ZFC._shapes('k', { invoice_id: '1' }).every(x => !x.arg.headers));
+ok('legacy flat shape remains', shapes.some(x => x.arg.invoice_id === '123' && !x.arg.url_query));
+ok('no shape carries custom headers (SDK strips them)',
+   shapes.every(x => !x.arg.headers));
 ok('every shape is named for reporting', shapes.every(s => typeof s.name === 'string'));
 
 console.log('\nZFClient.describe — rejection payloads the SDK actually uses');

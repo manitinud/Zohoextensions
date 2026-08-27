@@ -184,6 +184,23 @@ function buildMockScript(scenario) {
       }
 
       var key = arg.api_configuration_key || '';
+
+      // The documented contract: the stored URL carries a url_param.name
+      // placeholder and the widget supplies values as a url_query array of {key, value}
+      // pairs. Model a configuration that needs the org that way: without the
+      // pair the placeholder goes out literally (the live failure); with it,
+      // substitution happens and the call lands.
+      if (SCENARIO.requireOrgQuery) {
+        var q = Array.isArray(arg.url_query) ? arg.url_query : [];
+        var hasOrg = q.some(function (p) {
+          return p && p.key === 'organization_id' && p.value === '60058776365';
+        });
+        if (!hasOrg) {
+          return respond('{"code":70001,"message":"Invalid url provided.('
+            + 'https://www.zohoapis.in/books/v3/invoices?organization_id='
+            + '{url_param.organization_id})","status":false}');
+        }
+      }
       if (SCENARIO.booksCodeUnlessFlat && arg.invoice_id === undefined) {
         return Promise.resolve({ status_code: 200,
           response: { code: 4, message: 'Invalid value passed for invoice_id' } });

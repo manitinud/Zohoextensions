@@ -175,24 +175,27 @@ var ZFClient = (function () {
    */
   function shapesFor(key, values) {
     /*
-     * The Books API accepts the organization as the header
-     * X-com-zoho-books-organizationid as well as a query parameter. With the
-     * {organization_id} parameter placeholder proven to go out literally, the
-     * header is the one untried channel for the org — so header-bearing
-     * shapes lead.
+     * The documented contract (zoho.com/books/developer/widgets): a stored URL
+     * carries ${url_param.<name>} placeholders and the widget supplies the
+     * values at call time. The docs' own samples pass them as a url_query
+     * ARRAY of {key, value} pairs, so that shape leads; the url_params OBJECT
+     * form is kept because it is what the portal's "Learn More" sample showed.
+     * Proven dead live and dropped: custom headers (stripped by the SDK) and
+     * call-time url overrides (ignored).
      */
-    var orgHeader = values && values.organization_id
-      ? { 'X-com-zoho-books-organizationid': String(values.organization_id) }
-      : null;
-    var headerShapes = orgHeader ? [
-      { name: 'conn+org-header',
+    var pairs = [];
+    Object.keys(values || {}).forEach(function (k) {
+      if (values[k] !== undefined && values[k] !== null) {
+        pairs.push({ key: k, value: String(values[k]) });
+      }
+    });
+    return [
+      { name: 'conn+url_query',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
-               headers: orgHeader } },
-      { name: 'conn+org-header+url_params',
+               url_query: pairs } },
+      { name: 'conn+url_query+url_params',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
-               headers: orgHeader, url_params: values } }
-    ] : [];
-    return headerShapes.concat([
+               url_query: pairs, url_params: values } },
       { name: 'conn_url_params',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
                url_params: values } },
@@ -200,7 +203,7 @@ var ZFClient = (function () {
         arg: Object.assign({ api_configuration_key: key,
                              connection_link_name: CONNECTION }, values) },
       { name: 'url_params', arg: { api_configuration_key: key, url_params: values } }
-    ]);
+    ];
   }
 
   /*
@@ -406,7 +409,7 @@ var ZFClient = (function () {
   // literal {vl__...} in the URL. One delayed retry gives the stored value a
   // moment to land; anything else fails as before.
   function retryOnLiteral(key, values, err) {
-    if (!err || !/Invalid url provided.*\{vl__/.test(err.message || '')) throw err;
+    if (!err || !/Invalid url provided.*\{(vl__|url_param\.)/.test(err.message || '')) throw err;
     shapeLog.push('placeholder went out literally - retrying once after 1800ms');
     return new Promise(function (r) { setTimeout(r, 1800); })
       .then(function () { return callApiWith(key, values); });
