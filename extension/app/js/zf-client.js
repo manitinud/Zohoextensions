@@ -296,37 +296,53 @@ var ZFClient = (function () {
   var gfLog = [];
   var gfForm = null;
 
+  /*
+   * Global fields are addressed by their generated API NAME, not their display
+   * name — the SDK said so verbatim: "ensure to pass the correct global field
+   * API Name". The pair signature set(name, value) is the one that reached
+   * validation (the others hung), so it is the only form used, iterated over
+   * the plausible generated names until one is accepted and pinned.
+   */
+  var GF_NS = 'in_wyw1vx3';
+  var gfName = {};   // pinned working API name per logical field
+
+  function gfCandidates(name) {
+    return [
+      'gf__' + GF_NS + '_' + name,
+      'gf_' + GF_NS + '_' + name,
+      GF_NS + '_' + name,
+      'gf_' + name,
+      name
+    ];
+  }
+
   function trySetGlobal(name, value) {
     var gf = ZFAPPS.API && ZFAPPS.API.GLOBALFIELDS;
     if (!gf || typeof gf.set !== 'function' || value === undefined || value === null) {
       return Promise.resolve(false);
     }
-    var forms = [
-      { name: 'name+value', call: function () { return gf.set({ name: name, value: String(value) }); } },
-      { name: 'pair', call: function () { return gf.set(name, String(value)); } },
-      { name: 'map', call: function () { var m = {}; m[name] = String(value); return gf.set(m); } },
-      { name: 'api_name', call: function () { return gf.set({ api_name: name, value: String(value) }); } }
-    ];
-    if (gfForm) forms = forms.filter(function (f) { return f.name === gfForm; });
+    var names = gfName[name] ? [gfName[name]] : gfCandidates(name);
 
-    return forms.reduce(function (chain, form) {
+    return names.reduce(function (chain, apiName) {
       return chain.then(function (done) {
         if (done) return true;
         var p;
-        try { p = form.call(); } catch (e) {
-          gfLog.push('set/' + form.name + '(' + name + '): threw ' + (e.message || e));
+        try { p = gf.set(apiName, String(value)); }
+        catch (e) {
+          gfLog.push('set(' + apiName + '): threw ' + (e.message || e));
           return false;
         }
         if (!p || typeof p.then !== 'function') {
-          gfLog.push('set/' + form.name + '(' + name + '): no promise');
+          gfLog.push('set(' + apiName + '): no promise');
           return false;
         }
-        return withTimeout(p, 'gf.set').then(function () {
-          gfForm = form.name;
-          gfLog.push('set/' + form.name + '(' + name + '): ok');
+        return withTimeout(p, 'gf.set').then(function (r) {
+          gfName[name] = apiName;
+          gfLog.push('set(' + apiName + '): ok '
+            + ((JSON.stringify(r) || '') + '').slice(0, 80));
           return true;
         }, function (e) {
-          gfLog.push('set/' + form.name + '(' + name + '): ' + describe(e));
+          gfLog.push('set(' + apiName + '): ' + describe(e));
           return false;
         });
       });
@@ -336,19 +352,27 @@ var ZFClient = (function () {
   function tryGetGlobal(name) {
     var gf = ZFAPPS.API && ZFAPPS.API.GLOBALFIELDS;
     if (!gf || typeof gf.get !== 'function') return Promise.resolve();
-    var p;
-    try { p = gf.get(name); } catch (e) {
-      gfLog.push('get(' + name + '): threw ' + (e.message || e));
-      return Promise.resolve();
-    }
-    if (!p || typeof p.then !== 'function') {
-      try { p = gf.get({ name: name }); } catch (e2) { return Promise.resolve(); }
-    }
-    if (!p || typeof p.then !== 'function') return Promise.resolve();
-    return withTimeout(p, 'gf.get').then(function (r) {
-      gfLog.push('get(' + name + '): ' + (JSON.stringify(r) || String(r)).slice(0, 120));
-    }, function (e) {
-      gfLog.push('get(' + name + '): ' + describe(e));
+    var names = gfName[name] ? [gfName[name]] : gfCandidates(name);
+    return names.reduce(function (chain) {
+      return chain.then(function () { return null; });
+    }, Promise.resolve()).then(function () {
+      return names.reduce(function (chain, apiName) {
+        return chain.then(function (found) {
+          if (found) return found;
+          var p;
+          try { p = gf.get(apiName); }
+          catch (e) { gfLog.push('get(' + apiName + '): threw ' + (e.message || e)); return null; }
+          if (!p || typeof p.then !== 'function') return null;
+          return withTimeout(p, 'gf.get').then(function (r) {
+            gfLog.push('get(' + apiName + '): ' + (JSON.stringify(r) || String(r)).slice(0, 120));
+            gfName[name] = apiName;
+            return r || true;
+          }, function (e) {
+            gfLog.push('get(' + apiName + '): ' + describe(e));
+            return null;
+          });
+        });
+      }, Promise.resolve(null));
     });
   }
 
