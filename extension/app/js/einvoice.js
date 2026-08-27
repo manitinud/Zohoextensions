@@ -214,55 +214,72 @@ var EInvoice = (function () {
      * before calling any API: ZFAPPS.get takes dotted paths (the official
      * sample sets 'invoice.reference_number'), making this free if it works.
      */
+    /*
+     * Dotted-path gets, all CONCURRENT and all TIME-CAPPED. This SDK's
+     * signature failure is hanging, and an unknown path may hang too — an
+     * uncapped probe here would freeze the panel before the API is even tried.
+     */
     function tryPathGet() {
       var paths = ['invoice.einvoice_details', 'einvoice_details', 'invoice.einvoice'];
-      return paths.reduce(function (chain, path) {
-        return chain.then(function (got) {
-          if (got) return got;
-          return ZFAPPS.get(path).then(function (r) {
-            var v = r && (r[path] !== undefined ? r[path] : r);
-            var d = read(v);
-            merged.trace.push('get(' + path + '): '
-              + (v && typeof v === 'object' ? 'keys ' + Object.keys(v).join(',') : String(v)));
-            return isEmpty(d) ? null : d;
-          }).catch(function (e) {
-            merged.trace.push('get(' + path + '): ' + (e && e.message || e));
-            return null;
-          });
+      return Promise.all(paths.map(function (path) {
+        var call;
+        try { call = ZFAPPS.get(path); } catch (e) { call = Promise.reject(e); }
+        if (!call || typeof call.then !== 'function') call = Promise.reject(new Error('no promise'));
+        return ZFClient.timeout(call, path).then(function (r) {
+          var v = r && (r[path] !== undefined ? r[path] : r);
+          var d = read(v);
+          merged.trace.push('get(' + path + '): '
+            + (v && typeof v === 'object' ? 'keys ' + Object.keys(v).join(',') : String(v)));
+          return isEmpty(d) ? null : d;
+        }).catch(function (e) {
+          merged.trace.push('get(' + path + '): ' + (e && e.message || e));
+          return null;
         });
-      }, Promise.resolve(null));
+      })).then(function (results) {
+        return results.filter(Boolean)[0] || null;
+      });
     }
 
-    return tryPathGet().then(function (fromPage) {
-      if (fromPage) {
-        fromPage.scanHits = merged.scanHits;
-        fromPage.trace = merged.trace;
-        return fromPage;
+    /*
+     * The page probe and the API read RACE: both are reads, so whichever
+     * yields data first is the answer, and neither can delay the other.
+     */
+    var pageP = tryPathGet().catch(function () { return null; });
+    var apiP = ZFClient.getInvoiceRecord(invoice.invoice_id)
+      .then(function (body) {
+        merged.trace.push('api body: ' + outline(body));
+        var dug = deepExtract(body);
+        var d = dug.details ? read(dug.details) : {
+          irn: dug.fields.irn || null,
+          ackNo: dug.fields.ackNo || null,
+          ackDate: dug.fields.ackDate || null,
+          status: dug.fields.status || null,
+          qrLink: dug.fields.qrLink || null
+        };
+        return isEmpty(d) ? null : d;
+      })
+      .catch(function (err) {
+        merged.lookupError = err && err.message
+          ? err.message
+          : 'Could not read the e-invoice record from Zoho Books.';
+        return null;
+      });
+
+    return new Promise(function (resolveOut) {
+      var remaining = 2, winner = null;
+      function on(d) {
+        if (winner) return;
+        if (d) {
+          winner = d;
+          d.scanHits = merged.scanHits;
+          d.trace = merged.trace;
+          resolveOut(d);
+          return;
+        }
+        if (--remaining === 0) resolveOut(merged);
       }
-      return ZFClient.getInvoiceRecord(invoice.invoice_id)
-        .then(function (body) {
-          merged.trace.push('api body: ' + outline(body));
-          var dug = deepExtract(body);
-          var d = dug.details ? read(dug.details) : {
-            irn: dug.fields.irn || null,
-            ackNo: dug.fields.ackNo || null,
-            ackDate: dug.fields.ackDate || null,
-            status: dug.fields.status || null,
-            qrLink: dug.fields.qrLink || null
-          };
-          if (!isEmpty(d)) {
-            d.scanHits = merged.scanHits;
-            d.trace = merged.trace;
-            return d;
-          }
-          return merged;
-        })
-        .catch(function (err) {
-          merged.lookupError = err && err.message
-            ? err.message
-            : 'Could not read the e-invoice record from Zoho Books.';
-          return merged;
-        });
+      pageP.then(on);
+      apiP.then(on);
     });
   }
 

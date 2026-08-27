@@ -213,6 +213,25 @@ async function run(browser, name, scenario, checks) {
          (s.diag.match(/: ok.*/) || [''])[0]);
     });
 
+  // The SDK's signature failure is hanging; an unknown dotted path hanging
+  //      must never stall resolution while the API can still answer.
+  await run(browser, 'unknown-path get hangs — API route still wins',
+    Object.assign({ unknownGetHangs: true, exchangeRecord: true,
+                    requireConnection: true, getRecordHangs: true, settleMs: 5000 }, fx),
+    (s) => {
+      ok('details resolved despite hanging gets',
+         s.details.includes('112631363872267'), s.details);
+    });
+
+  await run(browser, 'dotted-path get supplies the details directly',
+    Object.assign({ pathGetWorks: true, requestHangs: true,
+                    getRecordHangs: true, settleMs: 5000 }, fx),
+    (s) => {
+      ok('details from the page itself', s.details.includes('112631363872267'), s.details);
+      ok('trace names the winning path', /get\(invoice\.einvoice_details\): keys/.test(s.diag),
+         (s.diag.match(/get\(invoice.*/) || [''])[0]);
+    });
+
   await run(browser, 'live exchange-record wrapper — details resolve',
     Object.assign({ exchangeRecord: true, requireConnection: true,
                     getRecordHangs: true, settleMs: 4000 }, fx),

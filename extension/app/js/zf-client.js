@@ -403,7 +403,8 @@ var ZFClient = (function () {
   function getEinvoiceQr(qrLink) {
     var m = /[?&]eInvoiceID=([^&]+)/i.exec(qrLink || '');
     if (!m) return Promise.reject(new Error('No eInvoiceID token in the QR link.'));
-    return callApi(API.einvoiceQr, { eInvoiceID: decodeURIComponent(m[1]) });
+    return callApi(API.einvoiceQr, { eInvoiceID: decodeURIComponent(m[1]) })
+      .then(function (body) { return normaliseBinary(body, 'QR image'); });
   }
 
   /* Raw binary arriving as a JS string (starts '%PDF' or PNG magic) is
@@ -452,6 +453,7 @@ var ZFClient = (function () {
     getEinvoiceQr: getEinvoiceQr,
     apiGetRecord: apiGetRecord,
     resize: resize,
+    timeout: withTimeout,
     API: API,
     _shapeLog: function () { return shapeLog; },
     _callShape: function () { return callShape; },

@@ -111,6 +111,11 @@ function buildMockScript(scenario) {
     get: function (entity) {
       if (entity === 'invoice') return Promise.resolve({ invoice: INVOICE });
       if (entity === 'organization') return Promise.resolve({ organization: ORG });
+      // Dotted-path gets: unknown paths may hang like everything else here.
+      if (SCENARIO.pathGetWorks && entity === 'invoice.einvoice_details') {
+        return Promise.resolve({ 'invoice.einvoice_details': EINVOICE_DETAILS });
+      }
+      if (SCENARIO.unknownGetHangs) return never();
       return Promise.resolve(null);
     },
 
