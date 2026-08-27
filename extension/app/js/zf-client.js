@@ -391,23 +391,14 @@ var ZFClient = (function () {
    * answers first is the answer — and when both fail, the wait is one timeout,
    * with both reasons reported.
    */
+  /*
+   * ZFAPPS.API.getRecord hung in every live run across five argument forms;
+   * it is no longer attempted — five guaranteed timeouts of pure noise.
+   */
   function getInvoiceRecord(invoiceId, invoiceNumber) {
-    return new Promise(function (resolve, reject) {
-      var settled = false, pending = 2, errs = [];
-      function win(body) { if (!settled) { settled = true; resolve(body); } }
-      function lose(label, e) {
-        errs.push(label + ': ' + (e && e.message ? e.message : describe(e)));
-        if (--pending === 0 && !settled) {
-          settled = true;
-          reject(new Error(errs.join(' | ')));
-        }
-      }
-      apiGetRecord(invoiceId).then(win, function (e) { lose('getRecord', e); });
-      var values = { invoice_id: invoiceId, invoice_ids: invoiceId };
-      if (invoiceNumber) values.invoice_number = invoiceNumber;
-      callConfigured(API.invoice, values)
-        .then(win, function (e) { lose('configuration route', e); });
-    });
+    var values = { invoice_id: invoiceId, invoice_ids: invoiceId };
+    if (invoiceNumber) values.invoice_number = invoiceNumber;
+    return callConfigured(API.invoice, values);
   }
 
   /*
