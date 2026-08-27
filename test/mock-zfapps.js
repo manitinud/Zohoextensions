@@ -209,6 +209,17 @@ function buildMockScript(scenario) {
       if (key.indexOf('getinvoicepdf') !== -1) return respond(SCENARIO.pdfBase64 || '');
       if (key.indexOf('geteinvoiceqr') !== -1) return respond(SCENARIO.qrBase64 || '');
       if (key.indexOf('getinvoice') !== -1) {
+        // Live v32: the stored URL's {vl__...} placeholder goes out literally
+        // right after a successful GLOBALFIELDS.set, then substitution catches
+        // up. Model that: fail every call in the first second, succeed after.
+        if (SCENARIO.literalUntilRetry) {
+          window.__literalFirstAt = window.__literalFirstAt || Date.now();
+          if (Date.now() - window.__literalFirstAt < 1000) {
+            return respond('{"code":70001,"message":"Invalid url provided.('
+              + 'https://www.zohoapis.in/books/v3/invoices?organization_id='
+              + '{vl__in_wyw1vx3_organization_id})","status":false}');
+          }
+        }
         if (SCENARIO.listResponse) {
           var target = JSON.parse(JSON.stringify(INVOICE));
           target.einvoice_details = EINVOICE_DETAILS;

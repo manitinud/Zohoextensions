@@ -250,6 +250,20 @@ async function run(browser, name, scenario, checks) {
          s.details.includes('112631363872267'), s.details);
     });
 
+  // Live v32: a fresh GLOBALFIELDS.set succeeds yet the very next configured
+  // call still carries the literal {vl__...}. One delayed retry must recover.
+  await run(browser, 'literal placeholder on first call — retry recovers',
+    Object.assign({ literalUntilRetry: true, getRecordHangs: true,
+                    unknownGetHangs: true, settleMs: 6000 }, fx),
+    (s) => {
+      ok('retry recorded in diagnostics',
+         /retrying once after 1800ms/.test(s.diag),
+         (s.diag.match(/placeholder.*|no argument form.*/) || [''])[0]);
+      ok('IRN rendered after the retry',
+         s.details.includes('56261ce5227241efb114a6d60617be39'), s.details);
+      ok('print enabled after the retry', s.printDisabled === false);
+    });
+
   await run(browser, 'print produces a stamped PDF',
     Object.assign({ acceptShape: 'flat', exchangeRecord: true, getRecordHangs: true }, fx),
     async (s, errors, page) => {

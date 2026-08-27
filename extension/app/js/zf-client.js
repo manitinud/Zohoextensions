@@ -395,10 +395,21 @@ var ZFClient = (function () {
       // Feed the configuration's placeholders before calling; harmless if the
       // SDK refuses, decisive if it accepts.
       return trySetGlobal('organization_id', merged.organization_id)
-        .then(function () { return trySetGlobal('invoice_id', merged.invoice_id); })
         .then(function () { return trySetGlobal('invoice_ids', merged.invoice_ids); })
-        .then(function () { return callApiWith(key, merged); });
+        .then(function () { return callApiWith(key, merged); })
+        .catch(function (err) { return retryOnLiteral(key, merged, err); });
     });
+  }
+
+  // Placeholder substitution may lag behind a fresh GLOBALFIELDS.set: the set
+  // resolves ok, yet the very next configured call still goes out with the
+  // literal {vl__...} in the URL. One delayed retry gives the stored value a
+  // moment to land; anything else fails as before.
+  function retryOnLiteral(key, values, err) {
+    if (!err || !/Invalid url provided.*\{vl__/.test(err.message || '')) throw err;
+    shapeLog.push('placeholder went out literally - retrying once after 1800ms');
+    return new Promise(function (r) { setTimeout(r, 1800); })
+      .then(function () { return callApiWith(key, values); });
   }
 
 
