@@ -223,9 +223,14 @@ function buildMockScript(scenario) {
       }
 
       if (key.indexOf('getinvoicepdf') !== -1) return respond(SCENARIO.pdfBase64 || '');
+      // The QR image config (books.zoho.in/einvoice/qrcode?eInvoiceID=...):
+      // raw image bytes, base64 by the time the exchange record carries them.
+      if (key.indexOf('getqrimage') !== -1) return respond(SCENARIO.qrBase64 || '');
       // The e-invoice record endpoint (GET /invoices/{id}/einvoice): JSON with
-      // the IRP's signed_qr_code TEXT, from which the widget renders the QR.
+      // the IRP's signed_qr_code TEXT — or, as seen live in the org that
+      // pushed through Zoho's GSP flow, a completely empty {}.
       if (key.indexOf('geteinvoiceqr') !== -1) {
+        if (SCENARIO.emptyEinvoiceRecord) return respond({});
         return respond({ code: 0, message: 'success', einvoice: {
           inv_ref_num: EINVOICE_DETAILS.inv_ref_num,
           ack_number: EINVOICE_DETAILS.ack_number,

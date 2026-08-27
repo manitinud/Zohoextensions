@@ -255,6 +255,19 @@ async function run(browser, name, scenario, checks) {
          s.details.includes('112631363872267'), s.details);
     });
 
+  // Live v35 in the client org: /invoices/{id}/einvoice returns {} — no
+  // signed QR text — and einvoice_details carries only qr_link. The QR must
+  // then arrive through the dedicated image configuration.
+  await run(browser, 'empty e-invoice record — QR via the image config',
+    Object.assign({ emptyEinvoiceRecord: true, requireConnection: true,
+                    getRecordHangs: true, settleMs: 5000 }, fx),
+    (s) => {
+      ok('details resolved', s.details.includes('112631363872267'), s.details);
+      ok('QR embedded from the image config', /embedded in print/.test(s.details),
+         s.details);
+      ok('ready to print', /ready to print/i.test(s.status), s.status);
+    });
+
   // Live v32: a fresh GLOBALFIELDS.set succeeds yet the very next configured
   // call still carries the literal {vl__...}. One delayed retry must recover.
   await run(browser, 'literal placeholder on first call — retry recovers',

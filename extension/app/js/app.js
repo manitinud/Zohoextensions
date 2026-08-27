@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v35';
+  var BUILD = 'v36';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -330,12 +330,10 @@
         hits.slice(0, 12).forEach(function (h) {
           note('  ' + h[0], String(h[1]).slice(0, 70));
         });
-        return state.qr ? Promise.resolve(state.qr) : Promise.resolve({
-          dataUri: null, remoteUrl: d.qrLink || null, inlined: false,
-          error: d.qrLink
-            ? 'No signed QR on the e-invoice record; Books holds it only as a linked image.'
-            : 'This invoice has no e-invoice QR on record.'
-        });
+        // No signed QR text on the record: the image Books links from
+        // einvoice_details.qr_link is then the only stored QR, fetched
+        // through its own API configuration.
+        return state.qr ? Promise.resolve(state.qr) : QRImage.fetchQr(d.qrLink);
       })
       .then(function (qr) {
         state.qr = qr;

@@ -54,7 +54,12 @@ var ZFClient = (function () {
   var API = {
     invoice: 'ac__in_wyw1vx3_getinvoice',
     invoicePdf: 'ac__in_wyw1vx3_getinvoicepdf',
-    einvoiceQr: 'ac__in_wyw1vx3_geteinvoiceqr'
+    einvoiceQr: 'ac__in_wyw1vx3_geteinvoiceqr',
+    // The e-invoice QR image itself: Books serves it from
+    // books.zoho.in/einvoice/qrcode?eInvoiceID=..., and for organizations that
+    // pushed through Zoho's GSP flow this image is the ONLY stored QR (the
+    // /einvoice record is empty and einvoice_details carries just qr_link).
+    qrImage: 'ac__in_wyw1vx3_getqrimage'
   };
 
   var callShape = null;   // pinned once a shape is known to work
@@ -396,11 +401,10 @@ var ZFClient = (function () {
     return getOrganization().then(function (o) {
       var merged = Object.assign(
         { organization_id: o && (o.organization_id || o.id) }, values || {});
-      // Feed the configuration's placeholders before calling; harmless if the
-      // SDK refuses, decisive if it accepts.
-      return trySetGlobal('organization_id', merged.organization_id)
-        .then(function () { return trySetGlobal('invoice_ids', merged.invoice_ids); })
-        .then(function () { return callApiWith(key, merged); })
+      // Placeholders are filled from url_param at call time (proven live in
+      // v35); the Hidden global fields refuse runtime writes and are not part
+      // of substitution, so no set is attempted.
+      return callApiWith(key, merged)
         .catch(function (err) { return retryOnLiteral(key, merged, err); });
     });
   }
@@ -548,7 +552,7 @@ var ZFClient = (function () {
     var m = /[?&]eInvoiceID=([^&]+)/i.exec(qrLink || '');
     if (!m) return Promise.reject(new Error('No eInvoiceID token in the QR link.'));
     var token = decodeURIComponent(m[1]);
-    return callConfigured(API.einvoiceQr, { eInvoiceID: token })
+    return callConfigured(API.qrImage, { eInvoiceID: token })
       .then(function (body) { return normaliseBinary(body, 'QR image'); });
   }
 
