@@ -76,5 +76,44 @@ var QRImage = (function () {
     });
   }
 
-  return { fetchQr: fetchQr, _toDataUri: toDataUri };
+  /*
+   * Render a QR image from the IRP's signed_qr_code TEXT.
+   *
+   * Books stores the e-invoice QR two ways: as a signed string on the
+   * e-invoice record (GET /invoices/{id}/einvoice) and as an image served
+   * from books.zoho.in — a host API Configurations cannot reach. Encoding
+   * the signed string locally is not a reconstruction: a QR code is only a
+   * transport for its text, and the IRP signature inside stays untouched.
+   */
+  function fromText(text) {
+    if (!text || typeof text !== 'string' || text.length < 20) return null;
+    if (typeof qrcode !== 'function' || typeof document === 'undefined') return null;
+    try {
+      // Type 0 = auto-size to the data; 'M' matches the IRP's own QR level.
+      var qr = qrcode(0, 'M');
+      qr.addData(text);
+      qr.make();
+      var n = qr.getModuleCount();
+      var cell = 4, margin = 8;
+      var size = n * cell + margin * 2;
+      var canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#000';
+      for (var r = 0; r < n; r++) {
+        for (var c = 0; c < n; c++) {
+          if (qr.isDark(r, c)) {
+            ctx.fillRect(margin + c * cell, margin + r * cell, cell, cell);
+          }
+        }
+      }
+      return canvas.toDataURL('image/png');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return { fetchQr: fetchQr, fromText: fromText, _toDataUri: toDataUri };
 })();

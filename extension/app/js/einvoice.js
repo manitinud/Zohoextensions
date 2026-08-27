@@ -205,21 +205,19 @@ var EInvoice = (function () {
     var fromContext = read(invoice.einvoice_details);
     var scanned = fromScan(invoice);
 
-    if (fromContext.qrLink) {
-      fromContext.scanHits = scanned.hits;
-      return Promise.resolve(fromContext);
-    }
-
     var merged = {
       irn: fromContext.irn || scanned.details.irn,
       ackNo: fromContext.ackNo || scanned.details.ackNo,
       ackDate: fromContext.ackDate || scanned.details.ackDate,
       status: fromContext.status || scanned.details.status,
       qrLink: fromContext.qrLink || scanned.details.qrLink,
+      qrData: null,
       scanHits: scanned.hits,
       trace: []
     };
-    if (merged.irn || merged.qrLink) return Promise.resolve(merged);
+    // Data already on the page still goes through withQr: the printable QR
+    // comes from the e-invoice record's signed_qr_code, never from qr_link.
+    if (merged.irn || merged.qrLink) return withQr(merged);
 
     /*
      * The Books page itself displays the e-invoice state, so ask the page
@@ -269,6 +267,7 @@ var EInvoice = (function () {
           status: dug.fields.status || null,
           qrLink: dug.fields.qrLink || null
         };
+        d.qrData = d.qrData || dug.fields.qrData || null;
         return isEmpty(d) ? null : d;
       })
       .catch(function (err) {
@@ -279,7 +278,10 @@ var EInvoice = (function () {
       });
 
     function withQr(d) {
-      if (!d || d.qrLink || d.qrData || !d.irn) return Promise.resolve(d);
+      // qr_link is NOT enough: it points at books.zoho.in, which an API
+      // Configuration cannot reach. The e-invoice record's signed_qr_code
+      // is the printable source, so fetch it whenever qrData is missing.
+      if (!d || d.qrData || !d.irn) return Promise.resolve(d);
       if (typeof ZFClient.getEinvoiceInfo !== 'function') return Promise.resolve(d);
       return ZFClient.getEinvoiceInfo(invoice.invoice_id).then(function (body) {
         merged.trace.push('einvoice body: ' + outline(body));

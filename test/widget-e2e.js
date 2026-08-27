@@ -123,11 +123,11 @@ async function run(browser, name, scenario, checks) {
 
   // 4. Only a nested shape is accepted — proves the fallback chain works and
   //    is not just finding the first option by luck.
-  await run(browser, 'only url_params shape accepted',
-    Object.assign({ acceptShape: 'url_params', settleMs: 8000 }, fx),
+  await run(browser, 'only url_param shape accepted',
+    Object.assign({ acceptShape: 'url_param', settleMs: 8000 }, fx),
     (s) => {
       ok('still resolves the details', s.details.includes('112631363872267'), s.details);
-      ok('records a url_params-bearing winner', /accepted shape: .*(url_params)/.test(s.diag),
+      ok('records a url_param-bearing winner', /accepted shape: .*(url_param)/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
@@ -233,15 +233,18 @@ async function run(browser, name, scenario, checks) {
     });
 
   // The documented contract: ${url_param.organization_id} in the stored URL,
-  // value supplied at call time as a url_query {key, value} pair.
-  await run(browser, 'org reaches Books via the url_query pair',
-    Object.assign({ requireOrgQuery: true, requireConnection: true,
+  // filled from a plain url_param OBJECT supplied at call time. Arrays draw
+  // "JSON is not well formed" (seen live in v34) and must never be sent.
+  await run(browser, 'org reaches Books via the url_param object',
+    Object.assign({ requireOrgParam: true, requireConnection: true,
                     getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
-      ok('details resolved via url_query',
+      ok('details resolved via url_param',
          s.details.includes('112631363872267'), s.details);
-      ok('a url_query-bearing shape won', /accepted shape: conn\+url_query/.test(s.diag),
+      ok('a url_param-bearing shape won', /accepted shape: conn\+url_param/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
+      ok('no shape was rejected as malformed JSON',
+         !/JSON is not well formed/.test(s.diag));
     });
 
   await run(browser, 'live exchange-record wrapper — details resolve',

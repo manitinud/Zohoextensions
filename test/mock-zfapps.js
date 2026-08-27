@@ -185,17 +185,16 @@ function buildMockScript(scenario) {
 
       var key = arg.api_configuration_key || '';
 
-      // The documented contract: the stored URL carries a url_param.name
-      // placeholder and the widget supplies values as a url_query array of {key, value}
-      // pairs. Model a configuration that needs the org that way: without the
-      // pair the placeholder goes out literally (the live failure); with it,
-      // substitution happens and the call lands.
-      if (SCENARIO.requireOrgQuery) {
-        var q = Array.isArray(arg.url_query) ? arg.url_query : [];
-        var hasOrg = q.some(function (p) {
-          return p && p.key === 'organization_id' && p.value === '60058776365';
-        });
-        if (!hasOrg) {
+      // The documented contract, confirmed live in v34: url_param is a PLAIN
+      // OBJECT whose entries fill url_param.name placeholders in the stored
+      // URL. An ARRAY drew "JSON is not well formed" live; no url_param at
+      // all leaves the placeholder untouched. Model all three answers.
+      if (SCENARIO.requireOrgParam) {
+        if (Array.isArray(arg.url_param) || Array.isArray(arg.url_query)) {
+          return Promise.reject('JSON is not well formed');
+        }
+        var up = arg.url_param || {};
+        if (up.organization_id !== '60058776365') {
           return respond('{"code":70001,"message":"Invalid url provided.('
             + 'https://www.zohoapis.in/books/v3/invoices?organization_id='
             + '{url_param.organization_id})","status":false}');
@@ -224,7 +223,16 @@ function buildMockScript(scenario) {
       }
 
       if (key.indexOf('getinvoicepdf') !== -1) return respond(SCENARIO.pdfBase64 || '');
-      if (key.indexOf('geteinvoiceqr') !== -1) return respond(SCENARIO.qrBase64 || '');
+      // The e-invoice record endpoint (GET /invoices/{id}/einvoice): JSON with
+      // the IRP's signed_qr_code TEXT, from which the widget renders the QR.
+      if (key.indexOf('geteinvoiceqr') !== -1) {
+        return respond({ code: 0, message: 'success', einvoice: {
+          inv_ref_num: EINVOICE_DETAILS.inv_ref_num,
+          ack_number: EINVOICE_DETAILS.ack_number,
+          signed_qr_code: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.MOCKSIGNEDQR'
+            + 'PAYLOADFORTESTSxxxxxxxxxxxxxxxxxxxxxxxx.MOCKSIGNATURE'
+        } });
+      }
       if (key.indexOf('getinvoice') !== -1) {
         // Live v32: the stored URL's {vl__...} placeholder goes out literally
         // right after a successful GLOBALFIELDS.set, then substitution catches

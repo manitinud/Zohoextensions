@@ -60,6 +60,18 @@ ok('detects jpeg prefix',
 ok('rejects a URL', QRImage._toDataUri('https://books.zoho.in/einvoice/qrcode?x=1') === null);
 ok('rejects empty', QRImage._toDataUri('') === null);
 
+console.log('\nQRImage.fromText (signed_qr_code -> locally rendered QR)');
+ok('null without a canvas (no document here)',
+   QRImage.fromText('eyJhbGciOiJSUzI1NiJ9.' + 'x'.repeat(60)) === null);
+ok('null for short/empty text', QRImage.fromText('abc') === null && QRImage.fromText('') === null);
+// The vendored encoder itself must produce a matrix from a signed payload.
+const qrlib = require(path.join(APP, 'vendor-qrcode.js'));
+const q = qrlib(0, 'M');
+q.addData('eyJhbGciOiJSUzI1NiJ9.' + 'x'.repeat(120) + '.sig');
+q.make();
+ok('vendored encoder builds a QR matrix', q.getModuleCount() > 20, q.getModuleCount());
+ok('matrix cells are readable', typeof q.isDark(0, 0) === 'boolean');
+
 console.log('\nPDFStamp helpers');
 const irn = REAL.inv_ref_num;
 ok('IRN wraps rather than overflowing', PDFStamp._chunk(irn, 46).length === 2);
@@ -85,20 +97,22 @@ const ZFC = zbox.ZFClient;
 
 const shapes = ZFC._shapes('ac__in_test_getinvoice',
   { invoice_id: '123', invoice_number: 'INV/1', organization_id: '9' });
-ok('five shapes: two url_query-led plus three legacy', shapes.length === 5, shapes.length);
+ok('four shapes: url_param-led plus flat fallback', shapes.length === 4, shapes.length);
 ok('every shape carries the configuration key',
    shapes.every(x => x.arg.api_configuration_key === 'ac__in_test_getinvoice'));
-ok('the leading shape carries a url_query pair array',
-   Array.isArray(shapes[0].arg.url_query)
-   && shapes[0].arg.url_query.some(p => p.key === 'organization_id' && p.value === '9'),
+ok('the leading shape carries a plain url_param object',
+   shapes[0].arg.url_param && !Array.isArray(shapes[0].arg.url_param)
+   && shapes[0].arg.url_param.organization_id === '9',
    JSON.stringify(shapes[0].arg));
-ok('url_query values are strings',
-   shapes[0].arg.url_query.every(p => typeof p.value === 'string'));
-ok('a url_query+url_params combination is tried',
-   shapes.some(x => Array.isArray(x.arg.url_query) && x.arg.url_params
-                    && x.arg.url_params.invoice_number === 'INV/1'));
-ok('legacy flat shape remains', shapes.some(x => x.arg.invoice_id === '123' && !x.arg.url_query));
-ok('no shape carries custom headers (SDK strips them)',
+ok('url_param values are strings',
+   Object.values(shapes[0].arg.url_param).every(v => typeof v === 'string'));
+ok('a url_param+url_query combination is tried',
+   shapes.some(x => x.arg.url_param && x.arg.url_query
+                    && x.arg.url_query.invoice_number === 'INV/1'));
+ok('no shape sends an array (drew "JSON is not well formed" live)',
+   shapes.every(x => !Array.isArray(x.arg.url_param) && !Array.isArray(x.arg.url_query)));
+ok('legacy flat shape remains', shapes.some(x => x.arg.invoice_id === '123' && !x.arg.url_param));
+ok('no shape carries headers-plural (silently ignored by the SDK)',
    shapes.every(x => !x.arg.headers));
 ok('every shape is named for reporting', shapes.every(s => typeof s.name === 'string'));
 

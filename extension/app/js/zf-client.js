@@ -175,34 +175,35 @@ var ZFClient = (function () {
    */
   function shapesFor(key, values) {
     /*
-     * The documented contract (zoho.com/books/developer/widgets): a stored URL
-     * carries ${url_param.<name>} placeholders and the widget supplies the
-     * values at call time. The docs' own samples pass them as a url_query
-     * ARRAY of {key, value} pairs, so that shape leads; the url_params OBJECT
-     * form is kept because it is what the portal's "Learn More" sample showed.
-     * Proven dead live and dropped: custom headers (stripped by the SDK) and
-     * call-time url overrides (ignored).
+     * The documented contract (zoho.com/books/developer/widgets sdk-method):
+     * the request options carry PLAIN OBJECTS —
+     *   url_param: {key: value}   fills ${url_param.key} in the stored URL
+     *   url_query: {key: value}   appended to the query string
+     *   header:    {key: value}   (singular — 'headers' is silently ignored)
+     * Live run v34 confirmed url_query is processed server-side: sending it
+     * as an ARRAY drew "JSON is not well formed" while every other shape drew
+     * the untouched-placeholder error. Dropped as proven dead: url_params
+     * (ignored twice live), headers plural (ignored), call-time url overrides.
      */
-    var pairs = [];
+    var strung = {};
     Object.keys(values || {}).forEach(function (k) {
       if (values[k] !== undefined && values[k] !== null) {
-        pairs.push({ key: k, value: String(values[k]) });
+        strung[k] = String(values[k]);
       }
     });
     return [
+      { name: 'conn+url_param',
+        arg: { api_configuration_key: key, connection_link_name: CONNECTION,
+               url_param: strung } },
+      { name: 'conn+url_param+url_query',
+        arg: { api_configuration_key: key, connection_link_name: CONNECTION,
+               url_param: strung, url_query: strung } },
       { name: 'conn+url_query',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
-               url_query: pairs } },
-      { name: 'conn+url_query+url_params',
-        arg: { api_configuration_key: key, connection_link_name: CONNECTION,
-               url_query: pairs, url_params: values } },
-      { name: 'conn_url_params',
-        arg: { api_configuration_key: key, connection_link_name: CONNECTION,
-               url_params: values } },
+               url_query: strung } },
       { name: 'conn_flat',
         arg: Object.assign({ api_configuration_key: key,
-                             connection_link_name: CONNECTION }, values) },
-      { name: 'url_params', arg: { api_configuration_key: key, url_params: values } }
+                             connection_link_name: CONNECTION }, strung) }
     ];
   }
 
@@ -532,10 +533,10 @@ var ZFClient = (function () {
    * ZFAPPS.API.getRecord hung in every live run across five argument forms;
    * it is no longer attempted — five guaranteed timeouts of pure noise.
    */
-  function getInvoiceRecord(invoiceId, invoiceNumber) {
-    var values = { invoice_id: invoiceId, invoice_ids: invoiceId };
-    if (invoiceNumber) values.invoice_number = invoiceNumber;
-    return callConfigured(API.invoice, values);
+  // GET /invoices/${url_param.invoice_id} — the invoice detail record, which
+  // carries einvoice_details for e-invoiced organizations.
+  function getInvoiceRecord(invoiceId) {
+    return callConfigured(API.invoice, { invoice_id: invoiceId });
   }
 
   /*
@@ -582,13 +583,16 @@ var ZFClient = (function () {
    * (verified to exist live: it demands invoice_ids). Whether this connection
    * is scoped for it is answered by the response, which the caller traces.
    */
+  // GET /invoices/${url_param.invoice_id}/einvoice — the e-invoice record,
+  // including the IRP's signed_qr_code text the printable QR is rendered from.
   function getEinvoiceInfo(invoiceId) {
-    return callConfigured(API.einvoiceQr, { invoice_ids: invoiceId, invoice_id: invoiceId });
+    return callConfigured(API.einvoiceQr, { invoice_id: invoiceId });
   }
 
+  // GET /invoices/${url_param.invoice_id}?accept=pdf — the organization's own
+  // customised Books template, rendered by Books itself.
   function getInvoicePdf(invoiceId) {
-    return callConfigured(API.invoicePdf,
-        { invoice_id: invoiceId, invoice_ids: invoiceId, accept: 'pdf' })
+    return callConfigured(API.invoicePdf, { invoice_id: invoiceId })
       .then(function (body) { return normaliseBinary(body, 'invoice PDF'); });
   }
 

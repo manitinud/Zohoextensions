@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v34';
+  var BUILD = 'v35';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -303,9 +303,11 @@
       })
       .then(function (d) {
         state.einvoice = d;
-        // QR data delivered inline (base64/signed) needs no fetch at all.
+        // The QR comes from the e-invoice record: image bytes inline, or the
+        // IRP's signed_qr_code text rendered locally. qr_link is display-only
+        // (books.zoho.in is outside API-configuration reach).
         if (d.qrData) {
-          var uri = QRImage._toDataUri(d.qrData);
+          var uri = QRImage._toDataUri(d.qrData) || QRImage.fromText(d.qrData);
           if (uri) {
             state.qr = { dataUri: uri, remoteUrl: d.qrLink || null, inlined: true, error: null };
           }
@@ -328,7 +330,12 @@
         hits.slice(0, 12).forEach(function (h) {
           note('  ' + h[0], String(h[1]).slice(0, 70));
         });
-        return state.qr ? Promise.resolve(state.qr) : QRImage.fetchQr(d.qrLink);
+        return state.qr ? Promise.resolve(state.qr) : Promise.resolve({
+          dataUri: null, remoteUrl: d.qrLink || null, inlined: false,
+          error: d.qrLink
+            ? 'No signed QR on the e-invoice record; Books holds it only as a linked image.'
+            : 'This invoice has no e-invoice QR on record.'
+        });
       })
       .then(function (qr) {
         state.qr = qr;
