@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v31';
+  var BUILD = 'v32';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose

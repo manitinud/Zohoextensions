@@ -304,14 +304,23 @@ var ZFClient = (function () {
    * the plausible generated names until one is accepted and pinned.
    */
   var GF_NS = 'in_wyw1vx3';
-  var gfName = {};   // pinned working API name per logical field
+
+  /*
+   * The portal displays each global field's placeholder outright:
+   * vl__in_wyw1vx3_organization_id — prefix vl__, then the extension
+   * namespace, then the field name. Known names are pinned; the pattern
+   * covers any field added later.
+   */
+  var gfName = {
+    organization_id: 'vl__' + GF_NS + '_organization_id',
+    invoice_ids: 'vl__' + GF_NS + '_invoice_ids',
+    invoice_id: 'vl__' + GF_NS + '_invoice_id'
+  };
 
   function gfCandidates(name) {
     return [
+      'vl__' + GF_NS + '_' + name,
       'gf__' + GF_NS + '_' + name,
-      'gf_' + GF_NS + '_' + name,
-      GF_NS + '_' + name,
-      'gf_' + name,
       name
     ];
   }
