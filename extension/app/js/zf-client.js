@@ -152,37 +152,46 @@ var ZFClient = (function () {
    */
   var CONNECTION = 'zbooks';
 
-  function shapesFor(key, values) {
+  /*
+   * The real contract (from Zoho's own sample for this SDK): the widget builds
+   * the CONCRETE URL in JavaScript and passes it with connection_link_name —
+   * the configuration's {invoice_id} template is an allowlist pattern the URL
+   * must match, not something the SDK substitutes. The 70001 'Invalid url
+   * provided' with literal braces proved substitution never happens.
+   *
+   * The URL host is fixed to .in BY CONSTRUCTION: it must match the
+   * configuration's allowlisted pattern, and the configurations are saved
+   * against zohoapis.in.
+   */
+  var BOOKS_BASE = 'https://www.zohoapis.in/books/v3';
+  var QR_BASE = 'https://books.zoho.in/einvoice/qrcode';
+
+  function shapesFor(key, url, values) {
     return [
+      // Exact shape from the sample: config key as connection_link_name.
+      { name: 'url+cfgkey-as-conn',
+        arg: { url: url, method: 'GET', connection_link_name: key } },
+      { name: 'url+zbooks',
+        arg: { url: url, method: 'GET', connection_link_name: CONNECTION } },
+      { name: 'url+cfgkey+zbooks',
+        arg: { url: url, method: 'GET', api_configuration_key: key,
+               connection_link_name: CONNECTION } },
+      // Legacy configured-call shapes, kept as fallback — they reached Zoho.
       { name: 'conn_flat',
         arg: Object.assign({ api_configuration_key: key,
                              connection_link_name: CONNECTION }, values) },
-      { name: 'connCamel_flat',
-        arg: Object.assign({ api_configuration_key: key,
-                             connectionLinkName: CONNECTION }, values) },
       { name: 'conn_url_params',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
                url_params: values } },
-      { name: 'conn_both',
-        arg: Object.assign({ api_configuration_key: key,
-                             connection_link_name: CONNECTION,
-                             url_params: values }, values) },
-      { name: 'flat', arg: Object.assign({ api_configuration_key: key }, values) },
-      { name: 'url_params', arg: { api_configuration_key: key, url_params: values } },
-      { name: 'bare', arg: { api_configuration_key: key } }
+      { name: 'url_params', arg: { api_configuration_key: key, url_params: values } }
     ];
   }
 
   /*
-   * Every attempt is raced against a timeout.
-   *
-   * ZFAPPS.request can neither resolve nor reject — a rejected configuration
-   * simply never settles. Without a deadline the widget sits on "Reading
-   * e-invoice details" indefinitely, which reads as a hang rather than a
-   * failure and hides whatever the remaining shapes would have told us.
+   * Every attempt is raced against a timeout: ZFAPPS calls can neither resolve
+   * nor reject, and an unbounded wait reads as a frozen widget. Shortened
+   * under test via ?fastTimeouts=1 so a full sweep takes seconds.
    */
-  // Shortened under test so a full six-shape sweep takes seconds rather than
-  // minutes; the flag is only ever set by the local harness.
   var ATTEMPT_TIMEOUT_MS =
     (typeof location !== 'undefined' && /[?&]fastTimeouts=1/.test(location.search))
       ? 700 : 8000;
@@ -229,9 +238,16 @@ var ZFClient = (function () {
        * call, so it carries no statusCode: the race keeps going and a shape
        * that substitutes correctly can still win.
        */
+      if (typeof p.body === 'string' && /"code"\s*:/.test(p.body)) {
+        try { p.body = JSON.parse(p.body.trim()); } catch (e) { /* stays text */ }
+      }
+      if (typeof p.body === 'string'
+          && /Invalid url provided|"status"\s*:\s*false/.test(p.body)) {
+        throw new Error(p.body.slice(0, 160));
+      }
       if (p.body && typeof p.body === 'object'
           && p.body.code !== undefined && Number(p.body.code) !== 0
-          && !p.body.invoice) {
+          && !p.body.invoice && !p.body.invoices) {
         throw new Error('Books: ' + (p.body.message || ('code ' + p.body.code)));
       }
       if (p.body === null || p.body === undefined) {
@@ -250,19 +266,19 @@ var ZFClient = (function () {
   }
 
   /*
-   * `values` fill the {placeholders} in the configured URL. organization_id is
-   * supplied here rather than by callers: the invoice object ZFAPPS hands over
-   * does not contain it (verified against a live Books payload), so threading
-   * it in from there silently passed undefined.
+   * Build the concrete URL (organization_id appended — required by Books and
+   * absent from the invoice context object) and race the call shapes.
    */
-  function callApi(key, values) {
+  function callConfigured(key, url, values) {
     if (typeof ZFAPPS === 'undefined' || typeof ZFAPPS.request !== 'function') {
       return Promise.reject(new Error('ZFAPPS.request is not available in this SDK.'));
     }
     return getOrganization().then(function (o) {
-      var merged = Object.assign(
-        { organization_id: o && (o.organization_id || o.id) }, values || {});
-      return callApiWith(key, merged);
+      var orgId = o && (o.organization_id || o.id);
+      var full = url + (url.indexOf('?') === -1 ? '?' : '&') + 'organization_id='
+               + encodeURIComponent(orgId || '');
+      var merged = Object.assign({ organization_id: orgId }, values || {});
+      return callApiWith(key, full, merged);
     });
   }
 
@@ -274,8 +290,8 @@ var ZFClient = (function () {
    * the calls are read-only, so there is no reason to serialise them: the wait
    * is now one timeout regardless of how many shapes are tried.
    */
-  function callApiWith(key, values) {
-    var shapes = shapesFor(key, values || {});
+  function callApiWith(key, url, values) {
+    var shapes = shapesFor(key, url, values || {});
     if (callShape) {
       var pinned = shapes.filter(function (s) { return s.name === callShape; })[0];
       if (pinned) return attempt(pinned).then(function (p) { return p.body; });
@@ -378,7 +394,7 @@ var ZFClient = (function () {
    * answers first is the answer — and when both fail, the wait is one timeout,
    * with both reasons reported.
    */
-  function getInvoiceRecord(invoiceId) {
+  function getInvoiceRecord(invoiceId, invoiceNumber) {
     return new Promise(function (resolve, reject) {
       var settled = false, pending = 2, errs = [];
       function win(body) { if (!settled) { settled = true; resolve(body); } }
@@ -390,7 +406,9 @@ var ZFClient = (function () {
         }
       }
       apiGetRecord(invoiceId).then(win, function (e) { lose('getRecord', e); });
-      callApi(API.invoice, { invoice_id: invoiceId })
+      var values = { invoice_id: invoiceId, invoice_ids: invoiceId };
+      if (invoiceNumber) values.invoice_number = invoiceNumber;
+      callConfigured(API.invoice, BOOKS_BASE + '/invoices/' + invoiceId, values)
         .then(win, function (e) { lose('configuration route', e); });
     });
   }
@@ -403,7 +421,9 @@ var ZFClient = (function () {
   function getEinvoiceQr(qrLink) {
     var m = /[?&]eInvoiceID=([^&]+)/i.exec(qrLink || '');
     if (!m) return Promise.reject(new Error('No eInvoiceID token in the QR link.'));
-    return callApi(API.einvoiceQr, { eInvoiceID: decodeURIComponent(m[1]) })
+    var token = decodeURIComponent(m[1]);
+    return callConfigured(API.einvoiceQr,
+        QR_BASE + '?eInvoiceID=' + encodeURIComponent(token), { eInvoiceID: token })
       .then(function (body) { return normaliseBinary(body, 'QR image'); });
   }
 
@@ -434,7 +454,9 @@ var ZFClient = (function () {
   }
 
   function getInvoicePdf(invoiceId) {
-    return callApi(API.invoicePdf, { invoice_id: invoiceId })
+    return callConfigured(API.invoicePdf,
+        BOOKS_BASE + '/invoices/' + invoiceId + '?accept=pdf',
+        { invoice_id: invoiceId, invoice_ids: invoiceId, accept: 'pdf' })
       .then(function (body) { return normaliseBinary(body, 'invoice PDF'); });
   }
 

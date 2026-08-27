@@ -147,6 +147,31 @@ function buildMockScript(scenario) {
         : true;
       if (!shapeOk) return never();
 
+      // URL-style calls (the real contract): route by the concrete URL.
+      if (typeof arg.url === 'string') {
+        if (!arg.connection_link_name && !arg.connectionLinkName) {
+          return Promise.reject('No connections are provided');
+        }
+        var u = arg.url;
+        function respondUrl(payload) {
+          if (SCENARIO.exchangeRecord) {
+            return Promise.resolve({ status_message: 'OK', status_code: 200, header: {},
+              body: typeof payload === 'string' ? payload : JSON.stringify(payload) });
+          }
+          return Promise.resolve({ status_code: 200, response: payload });
+        }
+        if (u.indexOf('qrcode') !== -1) return respondUrl(SCENARIO.qrBase64 || '');
+        if (u.indexOf('accept=pdf') !== -1) return respondUrl(SCENARIO.pdfBase64 || '');
+        if (u.indexOf('/invoices/' + INVOICE.invoice_id) !== -1) {
+          var uinv = JSON.parse(JSON.stringify(INVOICE));
+          uinv.einvoice_details = EINVOICE_DETAILS;
+          return respondUrl({ code: 0, message: 'success', invoice: uinv });
+        }
+        // The live 70001, verbatim, as a STRING body — the parse gap we hit.
+        return respondUrl('{"code":70001,"message":"Invalid url provided.(' + u
+          + ')","status":false}');
+      }
+
       var key = arg.api_configuration_key || '';
       if (SCENARIO.booksCodeUnlessFlat && arg.invoice_id === undefined) {
         return Promise.resolve({ status_code: 200,
@@ -173,6 +198,14 @@ function buildMockScript(scenario) {
       if (key.indexOf('getinvoicepdf') !== -1) return respond(SCENARIO.pdfBase64 || '');
       if (key.indexOf('geteinvoiceqr') !== -1) return respond(SCENARIO.qrBase64 || '');
       if (key.indexOf('getinvoice') !== -1) {
+        if (SCENARIO.listResponse) {
+          var target = JSON.parse(JSON.stringify(INVOICE));
+          target.einvoice_details = EINVOICE_DETAILS;
+          var decoy = { invoice_id: '999', invoice_number: 'OTHER/001',
+                        einvoice_details: { inv_ref_num: 'WRONG_IRN_DO_NOT_PRINT',
+                                            ack_number: '000' } };
+          return respond({ code: 0, message: 'success', invoices: [decoy, target] });
+        }
         var inv = JSON.parse(JSON.stringify(INVOICE));
         inv.einvoice_details = EINVOICE_DETAILS;
         return respond({ code: 0, message: 'success', invoice: inv });

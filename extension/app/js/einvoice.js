@@ -128,8 +128,8 @@ var EInvoice = (function () {
    * string that looks like JSON, and take einvoice_details / its fields from
    * wherever they actually live.
    */
-  function deepExtract(root) {
-    var found = { details: null, fields: {} };
+  function deepExtract(root, targetId) {
+    var found = { details: null, fields: {}, matched: false };
     var WANT = { inv_ref_num: 'irn', irn: 'irn', ack_number: 'ackNo',
                  ack_date: 'ackDate', qr_link: 'qrLink',
                  status_formatted: 'status' };
@@ -147,10 +147,20 @@ var EInvoice = (function () {
         for (var i = 0; i < node.length && i < 50; i++) walk(node[i], depth + 1);
         return;
       }
+      /*
+       * If this object IS an invoice (has invoice_id), only take its
+       * einvoice_details when it is THE invoice — a list response carries
+       * many invoices, and the first one's IRN is not necessarily ours.
+       * An exact match always wins over any earlier loose find.
+       */
+      var isTarget = targetId && String(node.invoice_id) === String(targetId);
       Object.keys(node).forEach(function (k) {
         var v = node[k];
-        if (k === 'einvoice_details' && v && typeof v === 'object' && !found.details) {
-          found.details = v;
+        if (k === 'einvoice_details' && v && typeof v === 'object') {
+          if (isTarget) { found.details = v; found.matched = true; }
+          else if (!found.details && (!targetId || node.invoice_id === undefined)) {
+            found.details = v;
+          }
         }
         var mapped = WANT[k.toLowerCase()];
         if (mapped && v !== null && v !== undefined && v !== ''
@@ -220,7 +230,7 @@ var EInvoice = (function () {
      * uncapped probe here would freeze the panel before the API is even tried.
      */
     function tryPathGet() {
-      var paths = ['invoice.einvoice_details', 'einvoice_details', 'invoice.einvoice'];
+      var paths = ['invoice.einvoice_details'];
       return Promise.all(paths.map(function (path) {
         var call;
         try { call = ZFAPPS.get(path); } catch (e) { call = Promise.reject(e); }
@@ -229,7 +239,8 @@ var EInvoice = (function () {
           var v = r && (r[path] !== undefined ? r[path] : r);
           var d = read(v);
           merged.trace.push('get(' + path + '): '
-            + (v && typeof v === 'object' ? 'keys ' + Object.keys(v).join(',') : String(v)));
+            + (v && typeof v === 'object'
+               ? outline(v).slice(0, 200) : String(v)));
           return isEmpty(d) ? null : d;
         }).catch(function (e) {
           merged.trace.push('get(' + path + '): ' + (e && e.message || e));
@@ -245,10 +256,10 @@ var EInvoice = (function () {
      * yields data first is the answer, and neither can delay the other.
      */
     var pageP = tryPathGet().catch(function () { return null; });
-    var apiP = ZFClient.getInvoiceRecord(invoice.invoice_id)
+    var apiP = ZFClient.getInvoiceRecord(invoice.invoice_id, invoice.invoice_number)
       .then(function (body) {
         merged.trace.push('api body: ' + outline(body));
-        var dug = deepExtract(body);
+        var dug = deepExtract(body, invoice.invoice_id);
         var d = dug.details ? read(dug.details) : {
           irn: dug.fields.irn || null,
           ackNo: dug.fields.ackNo || null,

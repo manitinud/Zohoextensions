@@ -158,7 +158,8 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ requireConnection: true, getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
       ok('details resolved', s.details.includes('112631363872267'), s.details);
-      ok('a connection-bearing shape won', /accepted shape: conn/.test(s.diag),
+      ok('a connection-bearing shape won',
+         /accepted shape: (url\+.*|conn\w*)/.test(s.diag) && /zbooks|cfgkey|conn/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
@@ -228,8 +229,18 @@ async function run(browser, name, scenario, checks) {
                     getRecordHangs: true, settleMs: 5000 }, fx),
     (s) => {
       ok('details from the page itself', s.details.includes('112631363872267'), s.details);
-      ok('trace names the winning path', /get\(invoice\.einvoice_details\): keys/.test(s.diag),
+      ok('trace names the winning path', /get\(invoice\.einvoice_details\): .*inv_ref_num/.test(s.diag),
          (s.diag.match(/get\(invoice.*/) || [''])[0]);
+    });
+
+  // List-endpoint fallback: many invoices come back; the band must carry OUR
+  //      invoice's IRN, never the first one in the list.
+  await run(browser, 'list response — the right invoice is selected',
+    Object.assign({ listResponse: true, exchangeRecord: true, requireConnection: true,
+                    getRecordHangs: true, settleMs: 5000 }, fx),
+    (s) => {
+      ok('our IRN selected', s.details.includes('56261ce5227241efb114a6d60617be39'), s.details);
+      ok('decoy IRN rejected', !s.details.includes('WRONG_IRN_DO_NOT_PRINT'));
     });
 
   await run(browser, 'live exchange-record wrapper — details resolve',

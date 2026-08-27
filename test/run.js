@@ -83,17 +83,21 @@ vm.runInContext(fs.readFileSync(path.join(APP, 'zf-client.js'), 'utf8'), zbox,
                 { filename: 'zf-client.js' });
 const ZFC = zbox.ZFClient;
 
-const shapes = ZFC._shapes('ac__in_test_getinvoice', { invoice_id: '123', organization_id: '9' });
+const shapes = ZFC._shapes('ac__in_test_getinvoice',
+  'https://www.zohoapis.in/books/v3/invoices/123?organization_id=9',
+  { invoice_id: '123', organization_id: '9' });
 ok('several call shapes are attempted', shapes.length >= 5, shapes.length);
-ok('every shape carries the configuration key',
-   shapes.every(s => s.arg.api_configuration_key === 'ac__in_test_getinvoice'));
-ok('flat shape puts values at the top level',
-   shapes[0].arg.invoice_id === '123' && shapes[0].arg.organization_id === '9');
-ok('a nested shape is also tried',
-   shapes.some(s => s.arg.url_params && s.arg.url_params.invoice_id === '123'));
-ok('a bare shape is the last resort',
-   shapes[shapes.length - 1].name === 'bare'
-   && shapes[shapes.length - 1].arg.invoice_id === undefined);
+ok('the documented sample shape leads: url + config key as connection',
+   shapes[0].arg.url && shapes[0].arg.method === 'GET'
+   && shapes[0].arg.connection_link_name === 'ac__in_test_getinvoice',
+   JSON.stringify(shapes[0].arg));
+ok('a zbooks-connection url shape exists',
+   shapes.some(x => x.arg.url && x.arg.connection_link_name === 'zbooks'));
+ok('the concrete url carries the real invoice id',
+   shapes[0].arg.url.indexOf('/invoices/123') !== -1);
+ok('legacy configured-call shapes remain as fallback',
+   shapes.some(x => !x.arg.url && x.arg.api_configuration_key === 'ac__in_test_getinvoice'
+                    && x.arg.invoice_id === '123'));
 ok('every shape is named for reporting', shapes.every(s => typeof s.name === 'string'));
 
 console.log('\nZFClient.describe — rejection payloads the SDK actually uses');
