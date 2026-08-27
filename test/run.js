@@ -84,20 +84,18 @@ vm.runInContext(fs.readFileSync(path.join(APP, 'zf-client.js'), 'utf8'), zbox,
 const ZFC = zbox.ZFClient;
 
 const shapes = ZFC._shapes('ac__in_test_getinvoice',
-  'https://www.zohoapis.in/books/v3/invoices/123?organization_id=9',
-  { invoice_id: '123', organization_id: '9' });
-ok('several call shapes are attempted', shapes.length >= 5, shapes.length);
-ok('the documented sample shape leads: url + config key as connection',
-   shapes[0].arg.url && shapes[0].arg.method === 'GET'
-   && shapes[0].arg.connection_link_name === 'ac__in_test_getinvoice',
+  { invoice_id: '123', invoice_number: 'INV/1', organization_id: '9' });
+ok('exactly the three proven shapes remain', shapes.length === 3, shapes.length);
+ok('every shape carries the configuration key',
+   shapes.every(x => x.arg.api_configuration_key === 'ac__in_test_getinvoice'));
+ok('the leading shape names the connection and nests url_params',
+   shapes[0].arg.connection_link_name === 'zbooks'
+   && shapes[0].arg.url_params.invoice_number === 'INV/1',
    JSON.stringify(shapes[0].arg));
-ok('a zbooks-connection url shape exists',
-   shapes.some(x => x.arg.url && x.arg.connection_link_name === 'zbooks'));
-ok('the concrete url carries the real invoice id',
-   shapes[0].arg.url.indexOf('/invoices/123') !== -1);
-ok('legacy configured-call shapes remain as fallback',
-   shapes.some(x => !x.arg.url && x.arg.api_configuration_key === 'ac__in_test_getinvoice'
-                    && x.arg.invoice_id === '123'));
+ok('a flat-values shape exists',
+   shapes.some(x => x.arg.invoice_id === '123' && !x.arg.url_params));
+ok('no shape carries a call-time url (SDK ignores it)',
+   shapes.every(x => x.arg.url === undefined));
 ok('every shape is named for reporting', shapes.every(s => typeof s.name === 'string'));
 
 console.log('\nZFClient.describe — rejection payloads the SDK actually uses');

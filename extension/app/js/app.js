@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v26';
+  var BUILD = 'v27';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -266,6 +266,13 @@
       })
       .then(function (d) {
         state.einvoice = d;
+        // QR data delivered inline (base64/signed) needs no fetch at all.
+        if (d.qrData) {
+          var uri = QRImage._toDataUri(d.qrData);
+          if (uri) {
+            state.qr = { dataUri: uri, remoteUrl: d.qrLink || null, inlined: true, error: null };
+          }
+        }
         // What the invoice itself contained matters most: a hit here means no
         // network call is needed at all.
         (d.trace || []).forEach(function (t) { note('trace', t); });
@@ -284,7 +291,7 @@
         hits.slice(0, 12).forEach(function (h) {
           note('  ' + h[0], String(h[1]).slice(0, 70));
         });
-        return QRImage.fetchQr(d.qrLink);
+        return state.qr ? Promise.resolve(state.qr) : QRImage.fetchQr(d.qrLink);
       })
       .then(function (qr) {
         state.qr = qr;

@@ -132,6 +132,8 @@ var EInvoice = (function () {
     var found = { details: null, fields: {}, matched: false };
     var WANT = { inv_ref_num: 'irn', irn: 'irn', ack_number: 'ackNo',
                  ack_date: 'ackDate', qr_link: 'qrLink',
+                 qr_code: 'qrData', signed_qr_code: 'qrData',
+                 qr_code_image: 'qrData', einvoice_qr_code: 'qrData',
                  status_formatted: 'status' };
 
     function walk(node, depth) {
@@ -276,6 +278,22 @@ var EInvoice = (function () {
         return null;
       });
 
+    function withQr(d) {
+      if (!d || d.qrLink || d.qrData || !d.irn) return Promise.resolve(d);
+      if (typeof ZFClient.getEinvoiceInfo !== 'function') return Promise.resolve(d);
+      return ZFClient.getEinvoiceInfo(invoice.invoice_id).then(function (body) {
+        merged.trace.push('einvoice body: ' + outline(body));
+        var dug = deepExtract(body, invoice.invoice_id);
+        var extra = dug.details ? read(dug.details) : dug.fields;
+        d.qrLink = d.qrLink || extra.qrLink || dug.fields.qrLink || null;
+        d.qrData = d.qrData || dug.fields.qrData || null;
+        return d;
+      }).catch(function (e) {
+        merged.trace.push('einvoice info: ' + (e && e.message || e));
+        return d;
+      });
+    }
+
     return new Promise(function (resolveOut) {
       var remaining = 2, winner = null;
       function on(d) {
@@ -284,7 +302,7 @@ var EInvoice = (function () {
           winner = d;
           d.scanHits = merged.scanHits;
           d.trace = merged.trace;
-          resolveOut(d);
+          withQr(d).then(resolveOut);
           return;
         }
         if (--remaining === 0) resolveOut(merged);

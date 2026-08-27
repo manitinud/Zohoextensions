@@ -166,23 +166,21 @@ var ZFClient = (function () {
   var BOOKS_BASE = 'https://www.zohoapis.in/books/v3';
   var QR_BASE = 'https://books.zoho.in/einvoice/qrcode';
 
-  function shapesFor(key, url, values) {
+  /*
+   * The live evidence (v26): with api_configuration_key present the SDK sends
+   * the configuration's STORED URL verbatim — a url passed at call time is
+   * ignored, and omitting the key is refused outright. So the configured URLs
+   * must be placeholder-free, and every dynamic value travels as url_params.
+   * Path-style templates can never work in this SDK build.
+   */
+  function shapesFor(key, values) {
     return [
-      // Exact shape from the sample: config key as connection_link_name.
-      { name: 'url+cfgkey-as-conn',
-        arg: { url: url, method: 'GET', connection_link_name: key } },
-      { name: 'url+zbooks',
-        arg: { url: url, method: 'GET', connection_link_name: CONNECTION } },
-      { name: 'url+cfgkey+zbooks',
-        arg: { url: url, method: 'GET', api_configuration_key: key,
-               connection_link_name: CONNECTION } },
-      // Legacy configured-call shapes, kept as fallback — they reached Zoho.
-      { name: 'conn_flat',
-        arg: Object.assign({ api_configuration_key: key,
-                             connection_link_name: CONNECTION }, values) },
       { name: 'conn_url_params',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
                url_params: values } },
+      { name: 'conn_flat',
+        arg: Object.assign({ api_configuration_key: key,
+                             connection_link_name: CONNECTION }, values) },
       { name: 'url_params', arg: { api_configuration_key: key, url_params: values } }
     ];
   }
@@ -269,18 +267,17 @@ var ZFClient = (function () {
    * Build the concrete URL (organization_id appended — required by Books and
    * absent from the invoice context object) and race the call shapes.
    */
-  function callConfigured(key, url, values) {
+  function callConfigured(key, values) {
     if (typeof ZFAPPS === 'undefined' || typeof ZFAPPS.request !== 'function') {
       return Promise.reject(new Error('ZFAPPS.request is not available in this SDK.'));
     }
     return getOrganization().then(function (o) {
-      var orgId = o && (o.organization_id || o.id);
-      var full = url + (url.indexOf('?') === -1 ? '?' : '&') + 'organization_id='
-               + encodeURIComponent(orgId || '');
-      var merged = Object.assign({ organization_id: orgId }, values || {});
-      return callApiWith(key, full, merged);
+      var merged = Object.assign(
+        { organization_id: o && (o.organization_id || o.id) }, values || {});
+      return callApiWith(key, merged);
     });
   }
+
 
   /*
    * All candidate shapes are attempted CONCURRENTLY and the first success wins.
@@ -290,8 +287,8 @@ var ZFClient = (function () {
    * the calls are read-only, so there is no reason to serialise them: the wait
    * is now one timeout regardless of how many shapes are tried.
    */
-  function callApiWith(key, url, values) {
-    var shapes = shapesFor(key, url, values || {});
+  function callApiWith(key, values) {
+    var shapes = shapesFor(key, values || {});
     if (callShape) {
       var pinned = shapes.filter(function (s) { return s.name === callShape; })[0];
       if (pinned) return attempt(pinned).then(function (p) { return p.body; });
@@ -408,7 +405,7 @@ var ZFClient = (function () {
       apiGetRecord(invoiceId).then(win, function (e) { lose('getRecord', e); });
       var values = { invoice_id: invoiceId, invoice_ids: invoiceId };
       if (invoiceNumber) values.invoice_number = invoiceNumber;
-      callConfigured(API.invoice, BOOKS_BASE + '/invoices/' + invoiceId, values)
+      callConfigured(API.invoice, values)
         .then(win, function (e) { lose('configuration route', e); });
     });
   }
@@ -422,8 +419,7 @@ var ZFClient = (function () {
     var m = /[?&]eInvoiceID=([^&]+)/i.exec(qrLink || '');
     if (!m) return Promise.reject(new Error('No eInvoiceID token in the QR link.'));
     var token = decodeURIComponent(m[1]);
-    return callConfigured(API.einvoiceQr,
-        QR_BASE + '?eInvoiceID=' + encodeURIComponent(token), { eInvoiceID: token })
+    return callConfigured(API.einvoiceQr, { eInvoiceID: token })
       .then(function (body) { return normaliseBinary(body, 'QR image'); });
   }
 
@@ -453,9 +449,17 @@ var ZFClient = (function () {
     return body;
   }
 
+  /*
+   * The e-invoice record from the placeholder-free /invoices/einvoice endpoint
+   * (verified to exist live: it demands invoice_ids). Whether this connection
+   * is scoped for it is answered by the response, which the caller traces.
+   */
+  function getEinvoiceInfo(invoiceId) {
+    return callConfigured(API.einvoiceQr, { invoice_ids: invoiceId, invoice_id: invoiceId });
+  }
+
   function getInvoicePdf(invoiceId) {
     return callConfigured(API.invoicePdf,
-        BOOKS_BASE + '/invoices/' + invoiceId + '?accept=pdf',
         { invoice_id: invoiceId, invoice_ids: invoiceId, accept: 'pdf' })
       .then(function (body) { return normaliseBinary(body, 'invoice PDF'); });
   }
@@ -473,6 +477,7 @@ var ZFClient = (function () {
     getInvoiceRecord: getInvoiceRecord,
     getInvoicePdf: getInvoicePdf,
     getEinvoiceQr: getEinvoiceQr,
+    getEinvoiceInfo: getEinvoiceInfo,
     apiGetRecord: apiGetRecord,
     resize: resize,
     timeout: withTimeout,
