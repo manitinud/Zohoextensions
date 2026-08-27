@@ -174,7 +174,25 @@ var ZFClient = (function () {
    * Path-style templates can never work in this SDK build.
    */
   function shapesFor(key, values) {
-    return [
+    /*
+     * The Books API accepts the organization as the header
+     * X-com-zoho-books-organizationid as well as a query parameter. With the
+     * {organization_id} parameter placeholder proven to go out literally, the
+     * header is the one untried channel for the org — so header-bearing
+     * shapes lead.
+     */
+    var orgHeader = values && values.organization_id
+      ? { 'X-com-zoho-books-organizationid': String(values.organization_id) }
+      : null;
+    var headerShapes = orgHeader ? [
+      { name: 'conn+org-header',
+        arg: { api_configuration_key: key, connection_link_name: CONNECTION,
+               headers: orgHeader } },
+      { name: 'conn+org-header+url_params',
+        arg: { api_configuration_key: key, connection_link_name: CONNECTION,
+               headers: orgHeader, url_params: values } }
+    ] : [];
+    return headerShapes.concat([
       { name: 'conn_url_params',
         arg: { api_configuration_key: key, connection_link_name: CONNECTION,
                url_params: values } },
@@ -182,7 +200,7 @@ var ZFClient = (function () {
         arg: Object.assign({ api_configuration_key: key,
                              connection_link_name: CONNECTION }, values) },
       { name: 'url_params', arg: { api_configuration_key: key, url_params: values } }
-    ];
+    ]);
   }
 
   /*
@@ -267,6 +285,73 @@ var ZFClient = (function () {
    * Build the concrete URL (organization_id appended — required by Books and
    * absent from the invoice context object) and race the call shapes.
    */
+  /*
+   * GLOBALFIELDS.get/set exist on the SDK (confirmed live; they threw only
+   * when probed before init). If set works, the widget writes the fields the
+   * configuration placeholders read — organization_id from page context with
+   * no user entry, and invoice_id per call, which makes even path templates
+   * dynamic. Every form is tried once, timeout-capped, outcomes traced; a
+   * working form is pinned. Failure costs nothing: the call proceeds anyway.
+   */
+  var gfLog = [];
+  var gfForm = null;
+
+  function trySetGlobal(name, value) {
+    var gf = ZFAPPS.API && ZFAPPS.API.GLOBALFIELDS;
+    if (!gf || typeof gf.set !== 'function' || value === undefined || value === null) {
+      return Promise.resolve(false);
+    }
+    var forms = [
+      { name: 'name+value', call: function () { return gf.set({ name: name, value: String(value) }); } },
+      { name: 'pair', call: function () { return gf.set(name, String(value)); } },
+      { name: 'map', call: function () { var m = {}; m[name] = String(value); return gf.set(m); } },
+      { name: 'api_name', call: function () { return gf.set({ api_name: name, value: String(value) }); } }
+    ];
+    if (gfForm) forms = forms.filter(function (f) { return f.name === gfForm; });
+
+    return forms.reduce(function (chain, form) {
+      return chain.then(function (done) {
+        if (done) return true;
+        var p;
+        try { p = form.call(); } catch (e) {
+          gfLog.push('set/' + form.name + '(' + name + '): threw ' + (e.message || e));
+          return false;
+        }
+        if (!p || typeof p.then !== 'function') {
+          gfLog.push('set/' + form.name + '(' + name + '): no promise');
+          return false;
+        }
+        return withTimeout(p, 'gf.set').then(function () {
+          gfForm = form.name;
+          gfLog.push('set/' + form.name + '(' + name + '): ok');
+          return true;
+        }, function (e) {
+          gfLog.push('set/' + form.name + '(' + name + '): ' + describe(e));
+          return false;
+        });
+      });
+    }, Promise.resolve(false));
+  }
+
+  function tryGetGlobal(name) {
+    var gf = ZFAPPS.API && ZFAPPS.API.GLOBALFIELDS;
+    if (!gf || typeof gf.get !== 'function') return Promise.resolve();
+    var p;
+    try { p = gf.get(name); } catch (e) {
+      gfLog.push('get(' + name + '): threw ' + (e.message || e));
+      return Promise.resolve();
+    }
+    if (!p || typeof p.then !== 'function') {
+      try { p = gf.get({ name: name }); } catch (e2) { return Promise.resolve(); }
+    }
+    if (!p || typeof p.then !== 'function') return Promise.resolve();
+    return withTimeout(p, 'gf.get').then(function (r) {
+      gfLog.push('get(' + name + '): ' + (JSON.stringify(r) || String(r)).slice(0, 120));
+    }, function (e) {
+      gfLog.push('get(' + name + '): ' + describe(e));
+    });
+  }
+
   function callConfigured(key, values) {
     if (typeof ZFAPPS === 'undefined' || typeof ZFAPPS.request !== 'function') {
       return Promise.reject(new Error('ZFAPPS.request is not available in this SDK.'));
@@ -274,7 +359,12 @@ var ZFClient = (function () {
     return getOrganization().then(function (o) {
       var merged = Object.assign(
         { organization_id: o && (o.organization_id || o.id) }, values || {});
-      return callApiWith(key, merged);
+      // Feed the configuration's placeholders before calling; harmless if the
+      // SDK refuses, decisive if it accepts.
+      return trySetGlobal('organization_id', merged.organization_id)
+        .then(function () { return trySetGlobal('invoice_id', merged.invoice_id); })
+        .then(function () { return trySetGlobal('invoice_ids', merged.invoice_ids); })
+        .then(function () { return callApiWith(key, merged); });
     });
   }
 
@@ -472,6 +562,8 @@ var ZFClient = (function () {
     apiGetRecord: apiGetRecord,
     resize: resize,
     timeout: withTimeout,
+    tryGetGlobal: tryGetGlobal,
+    _gfLog: function () { return gfLog; },
     API: API,
     _shapeLog: function () { return shapeLog; },
     _callShape: function () { return callShape; },

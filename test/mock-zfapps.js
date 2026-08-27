@@ -130,6 +130,17 @@ function buildMockScript(scenario) {
         return Promise.reject(SCENARIO.requestRejectsWith);
       }
 
+      if (SCENARIO.requireOrgHeader) {
+        var h = arg.headers || {};
+        if (h['X-com-zoho-books-organizationid'] !== '60058776365') {
+          return Promise.resolve({ status_code: 200,
+            response: JSON.stringify({ code: 6, message:
+              'This user belongs to multiple organizations, hence the parameter '
+              + 'CompanyID/CompanyName is required for associating this user to a '
+              + 'specific organization.', status: false }) });
+        }
+      }
+
       // SDK 2.0 live behaviour: a configured call without the connection named
       // is rejected with this exact string.
       if (SCENARIO.requireConnection

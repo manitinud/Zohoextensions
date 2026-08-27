@@ -127,7 +127,7 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ acceptShape: 'url_params', settleMs: 8000 }, fx),
     (s) => {
       ok('still resolves the details', s.details.includes('112631363872267'), s.details);
-      ok('records a url_params-bearing winner', /accepted shape: (conn_)?url_params/.test(s.diag),
+      ok('records a url_params-bearing winner', /accepted shape: .*(url_params)/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
@@ -230,6 +230,16 @@ async function run(browser, name, scenario, checks) {
     (s) => {
       ok('our IRN selected', s.details.includes('56261ce5227241efb114a6d60617be39'), s.details);
       ok('decoy IRN rejected', !s.details.includes('WRONG_IRN_DO_NOT_PRINT'));
+    });
+
+  await run(browser, 'org reaches Books via the header channel',
+    Object.assign({ requireOrgHeader: true, requireConnection: true,
+                    getRecordHangs: true, settleMs: 4000 }, fx),
+    (s) => {
+      ok('details resolved via the org header',
+         s.details.includes('112631363872267'), s.details);
+      ok('a header-bearing shape won', /accepted shape: conn\+org-header/.test(s.diag),
+         (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
 
   await run(browser, 'live exchange-record wrapper — details resolve',

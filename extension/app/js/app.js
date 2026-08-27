@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v29';
+  var BUILD = 'v30';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -295,7 +295,11 @@
         note('API config (pdf)', ZFClient.API.invoicePdf);
         note('API config (qr)', ZFClient.API.einvoiceQr);
 
-        return EInvoice.resolve(state.invoice);
+        // GLOBALFIELDS threw when probed before init; read it again now that
+        // init has settled, so the trace shows its real behaviour.
+        var gfPeek = ZFClient.tryGetGlobal
+          ? ZFClient.tryGetGlobal('organization_id') : Promise.resolve();
+        return gfPeek.then(function () { return EInvoice.resolve(state.invoice); });
       })
       .then(function (d) {
         state.einvoice = d;
@@ -328,6 +332,9 @@
       })
       .then(function (qr) {
         state.qr = qr;
+        (ZFClient._gfLog ? ZFClient._gfLog() : []).forEach(function (l) {
+          note('globalfield', l);
+        });
         if (state.einvoice.lookupError) note('API error', state.einvoice.lookupError);
         var log = ZFClient._shapeLog();
         if (log.length) note('request shapes tried', log.join(' | '));
