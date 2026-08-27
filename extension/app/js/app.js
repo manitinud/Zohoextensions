@@ -7,7 +7,7 @@
  */
 (function () {
 
-  var BUILD = 'v28';
+  var BUILD = 'v29';
 
   /*
    * Print appearance. There is no settings widget: Zoho Books extensions expose
@@ -81,6 +81,39 @@
         var ak = [];
         for (var a in ZFAPPS.API) { ak.push(a + '(' + (typeof ZFAPPS.API[a])[0] + ')'); }
         note('ZFAPPS.API members', ak.sort().join(', ') || '(none enumerable)');
+
+        /*
+         * GLOBALFIELDS appeared in the SDK 2.0 surface. Global fields are how
+         * API-configuration {placeholders} get per-organization values, so what
+         * this object exposes — and whether fields are readable or writable at
+         * runtime — decides how far the multi-org design can go.
+         */
+        var gf = ZFAPPS.API.GLOBALFIELDS;
+        if (gf && typeof gf === 'object') {
+          var gk = [];
+          for (var g in gf) { gk.push(g + '(' + (typeof gf[g])[0] + ')'); }
+          note('GLOBALFIELDS members', gk.sort().join(', ') || '(none enumerable)');
+          ['get', 'getAll', 'update', 'set'].forEach(function (fn) {
+            if (typeof gf[fn] === 'function') {
+              try {
+                var call = fn === 'get' ? gf[fn]({ name: 'organization_id' }) : gf[fn]();
+                if (call && typeof call.then === 'function') {
+                  ZFClient.timeout(call, 'GLOBALFIELDS.' + fn).then(function (r) {
+                    note('GLOBALFIELDS.' + fn + '()',
+                         (JSON.stringify(r) || String(r)).slice(0, 200));
+                  }, function (e) {
+                    note('GLOBALFIELDS.' + fn + '()', 'rejected: '
+                         + ((e && e.message) || e));
+                  });
+                } else {
+                  note('GLOBALFIELDS.' + fn + '()', String(call).slice(0, 120));
+                }
+              } catch (e2) {
+                note('GLOBALFIELDS.' + fn + '()', 'threw: ' + (e2.message || e2));
+              }
+            }
+          });
+        }
       }
     } catch (e) { note('ZFAPPS.API members', 'threw: ' + (e.message || e)); }
   }
