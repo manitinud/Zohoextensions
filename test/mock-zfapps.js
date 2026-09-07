@@ -27,9 +27,9 @@ function buildMockScript(scenario) {
   // The invoice ZFAPPS hands a widget: no einvoice_details, no organization_id.
   var INVOICE = {
     invoice_id: '3232508000003094940',
-    invoice_number: 'AVMF/26-27/056',
+    invoice_number: 'ZYL/26-27/056',
     date: '2026-07-31',
-    customer_name: 'Limson INC',
+    customer_name: 'Globex Traders LLC',
     total: 94554,
     currency_code: 'USD'
   };
@@ -39,23 +39,23 @@ function buildMockScript(scenario) {
 
   if (SCENARIO.einvoiceInContext) {
     INVOICE.einvoice_details = {
-      inv_ref_num: '56261ce5227241efb114a6d60617be398be0923f8fa39fec330407ce110be1ef',
-      ack_number: '112631363872267', ack_date: '2026-07-09 11:12:00',
+      inv_ref_num: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      ack_number: '112010036531240', ack_date: '2026-07-09 11:12:00',
       status_formatted: 'Pushed',
-      qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c'
+      qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-012345'
     };
   }
 
-  var ORG = { organization_id: '60058776365', name: 'Adivishnu Marine Foods Pvt Ltd' };
+  var ORG = { organization_id: '60000000001', name: 'Zylker Exports Pvt Ltd' };
 
   var EINVOICE_DETAILS = {
-    inv_ref_num: '56261ce5227241efb114a6d60617be398be0923f8fa39fec330407ce110be1ef',
+    inv_ref_num: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     status_formatted: 'Pushed',
-    ack_number: '112631363872267',
+    ack_number: '112010036531240',
     status: 'pushed',
     formatted_status: 'Pushed',
     ack_date: '2026-07-09 11:12:00',
-    qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c64ec31e389'
+    qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-0123456789abcdef'
   };
 
   window.__mockCalls = [];
@@ -132,7 +132,7 @@ function buildMockScript(scenario) {
 
       if (SCENARIO.requireOrgHeader) {
         var h = arg.headers || {};
-        if (h['X-com-zoho-books-organizationid'] !== '60058776365') {
+        if (h['X-com-zoho-books-organizationid'] !== '60000000001') {
           return Promise.resolve({ status_code: 200,
             response: JSON.stringify({ code: 6, message:
               'This user belongs to multiple organizations, hence the parameter '
@@ -194,7 +194,7 @@ function buildMockScript(scenario) {
           return Promise.reject('JSON is not well formed');
         }
         var up = arg.url_param || {};
-        if (up.organization_id !== '60058776365') {
+        if (up.organization_id !== '60000000001') {
           return respond('{"code":70001,"message":"Invalid url provided.('
             + 'https://www.zohoapis.in/books/v3/invoices?organization_id='
             + '{url_param.organization_id})","status":false}');

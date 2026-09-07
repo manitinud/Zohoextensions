@@ -75,7 +75,7 @@ invoice when it is pushed to the IRP. Confirmed live:
   "inv_ref_num": "53801fe38316ea9f7eb31b1a0074f8952378ba1eb4aa6b5c46815a92f95d5ff0",
   "status_formatted": "Pushed",
   "ack_number": "152625262386743",
-  "qr_link": "https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c…",
+  "qr_link": "https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-012345…",
   "status": "pushed",
   "formatted_status": "Pushed",
   "ack_date": "2026-04-02 11:18:00"

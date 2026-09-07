@@ -51,7 +51,7 @@ Confirmed against a live e-invoiced organization:
   "status":           "pushed",
   "status_formatted": "Pushed",
   "is_cancellable":   false,
-  "qr_link":          "https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c…"
+  "qr_link":          "https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-012345…"
 }
 ```
 

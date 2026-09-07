@@ -38,8 +38,8 @@ function serve() {
 /* A one-page PDF and a small PNG, base64, standing in for what Books returns. */
 async function fixtures(browser) {
   const p = await browser.newPage();
-  await p.setContent('<h1 style="font:24px Arial">ADIVISHNU MARINE FOODS</h1>'
-    + '<p>Client template body — Vannamei Stock</p>');
+  await p.setContent('<h1 style="font:24px Arial">ZYLKER EXPORTS</h1>'
+    + '<p>Client template body — Frozen Shrimp</p>');
   const pdf = await p.pdf({ format: 'A4' });
   await p.close();
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE'
@@ -92,8 +92,8 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ acceptShape: 'flat' }, fx),
     (s) => {
       ok('build is reported', /build: v/.test(s.diag), s.diag.split('\n')[0]);
-      ok('IRN rendered', s.details.includes('56261ce5227241efb114a6d60617be39'), s.details);
-      ok('ack number rendered', s.details.includes('112631363872267'));
+      ok('IRN rendered', s.details.includes('e3b0c44298fc1c149afbf4c8996fb924'), s.details);
+      ok('ack number rendered', s.details.includes('112010036531240'));
       ok('status says ready', /ready to print/i.test(s.status), s.status);
       ok('status styled ok', /status--ok/.test(s.statusClass), s.statusClass);
       ok('print enabled', s.printDisabled === false);
@@ -107,7 +107,7 @@ async function run(browser, name, scenario, checks) {
       ok('does not sit on Loading', !/^Loading/.test(s.status), s.status);
       ok('init timeout reported', /extension\.init.*timed out/i.test(s.diag),
          (s.diag.match(/extension\.init.*/) || [''])[0]);
-      ok('details still resolved', s.details.includes('112631363872267'), s.details);
+      ok('details still resolved', s.details.includes('112010036531240'), s.details);
     });
 
   // 3. Every request hangs — the failure mode that read as a freeze.
@@ -126,7 +126,7 @@ async function run(browser, name, scenario, checks) {
   await run(browser, 'only url_param shape accepted',
     Object.assign({ acceptShape: 'url_param', settleMs: 8000 }, fx),
     (s) => {
-      ok('still resolves the details', s.details.includes('112631363872267'), s.details);
+      ok('still resolves the details', s.details.includes('112010036531240'), s.details);
       ok('records a url_param-bearing winner', /accepted shape: .*(url_param)/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
     });
@@ -157,7 +157,7 @@ async function run(browser, name, scenario, checks) {
   await run(browser, 'SDK 2.0 requires the connection named in the call',
     Object.assign({ requireConnection: true, getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
-      ok('details resolved', s.details.includes('112631363872267'), s.details);
+      ok('details resolved', s.details.includes('112010036531240'), s.details);
       ok('a connection-bearing shape won',
          /accepted shape: (url\+.*|conn\w*)/.test(s.diag) && /zbooks|cfgkey|conn/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
@@ -170,7 +170,7 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ booksCodeUnlessFlat: true, getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
       ok('details resolved via a flat-value shape',
-         s.details.includes('112631363872267'), s.details);
+         s.details.includes('112010036531240'), s.details);
       ok('the code-4 reason is logged',
          /Invalid value passed for invoice_id/.test(s.diag),
          (s.diag.match(/url_params.*/) || [''])[0]);
@@ -183,7 +183,7 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ einvoiceInContext: true, requestHangs: true, getRecordHangs: true }, fx),
     (s) => {
       ok('details resolved from the invoice itself',
-         s.details.includes('112631363872267'), s.details);
+         s.details.includes('112010036531240'), s.details);
       ok('no record lookup attempted', !/getRecord\//.test(s.diag),
          (s.diag.match(/getRecord.*/) || [''])[0]);
       ok('scan reported what it found', /einvoice-ish keys in invoice: [1-9]/.test(s.diag),
@@ -198,7 +198,7 @@ async function run(browser, name, scenario, checks) {
                     getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
       ok('details resolved from a direct payload',
-         s.details.includes('112631363872267'), s.details);
+         s.details.includes('112010036531240'), s.details);
       ok('success log names the payload', /ok \(keys: code,message,invoice\)/.test(s.diag),
          (s.diag.match(/: ok.*/) || [''])[0]);
     });
@@ -210,14 +210,14 @@ async function run(browser, name, scenario, checks) {
                     requireConnection: true, getRecordHangs: true, settleMs: 5000 }, fx),
     (s) => {
       ok('details resolved despite hanging gets',
-         s.details.includes('112631363872267'), s.details);
+         s.details.includes('112010036531240'), s.details);
     });
 
   await run(browser, 'dotted-path get supplies the details directly',
     Object.assign({ pathGetWorks: true, requestHangs: true,
                     getRecordHangs: true, settleMs: 5000 }, fx),
     (s) => {
-      ok('details from the page itself', s.details.includes('112631363872267'), s.details);
+      ok('details from the page itself', s.details.includes('112010036531240'), s.details);
       ok('trace names the winning path', /get\(invoice\.einvoice_details\): .*inv_ref_num/.test(s.diag),
          (s.diag.match(/get\(invoice.*/) || [''])[0]);
     });
@@ -228,7 +228,7 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ listResponse: true, exchangeRecord: true, requireConnection: true,
                     getRecordHangs: true, settleMs: 5000 }, fx),
     (s) => {
-      ok('our IRN selected', s.details.includes('56261ce5227241efb114a6d60617be39'), s.details);
+      ok('our IRN selected', s.details.includes('e3b0c44298fc1c149afbf4c8996fb924'), s.details);
       ok('decoy IRN rejected', !s.details.includes('WRONG_IRN_DO_NOT_PRINT'));
     });
 
@@ -240,7 +240,7 @@ async function run(browser, name, scenario, checks) {
                     getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
       ok('details resolved via url_param',
-         s.details.includes('112631363872267'), s.details);
+         s.details.includes('112010036531240'), s.details);
       ok('a url_param-bearing shape won', /accepted shape: conn\+url_param/.test(s.diag),
          (s.diag.match(/accepted shape.*/) || [''])[0]);
       ok('no shape was rejected as malformed JSON',
@@ -252,7 +252,7 @@ async function run(browser, name, scenario, checks) {
                     getRecordHangs: true, settleMs: 4000 }, fx),
     (s) => {
       ok('details dug out of the exchange record',
-         s.details.includes('112631363872267'), s.details);
+         s.details.includes('112010036531240'), s.details);
     });
 
   // Live v35 in the client org: /invoices/{id}/einvoice returns {} — no
@@ -262,7 +262,7 @@ async function run(browser, name, scenario, checks) {
     Object.assign({ emptyEinvoiceRecord: true, requireConnection: true,
                     getRecordHangs: true, settleMs: 5000 }, fx),
     (s) => {
-      ok('details resolved', s.details.includes('112631363872267'), s.details);
+      ok('details resolved', s.details.includes('112010036531240'), s.details);
       ok('QR embedded from the image config', /embedded in print/.test(s.details),
          s.details);
       ok('ready to print', /ready to print/i.test(s.status), s.status);
@@ -278,7 +278,7 @@ async function run(browser, name, scenario, checks) {
          /retrying once after 1800ms/.test(s.diag),
          (s.diag.match(/placeholder.*|no argument form.*/) || [''])[0]);
       ok('IRN rendered after the retry',
-         s.details.includes('56261ce5227241efb114a6d60617be39'), s.details);
+         s.details.includes('e3b0c44298fc1c149afbf4c8996fb924'), s.details);
       ok('print enabled after the retry', s.printDisabled === false);
     });
 
@@ -324,8 +324,8 @@ async function run(browser, name, scenario, checks) {
         for (let i = 1; i <= doc.numPages; i++) {
           const t = (await (await doc.getPage(i)).getTextContent())
             .items.map(x => x.str).join('');
-          if (t.includes('56261ce5227241efb114a6d60617be39')) banded++;
-          if (/ADIVISHNU|Vannamei/.test(t)) clientKept++;
+          if (t.includes('e3b0c44298fc1c149afbf4c8996fb924')) banded++;
+          if (/ZYLKER|Frozen Shrimp/.test(t)) clientKept++;
         }
         ok('band on every page', banded === doc.numPages, banded + '/' + doc.numPages);
         ok("client's own content preserved", clientKept === doc.numPages,

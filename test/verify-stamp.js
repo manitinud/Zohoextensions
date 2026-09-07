@@ -32,9 +32,9 @@ const PDFStamp = loadModule(path.join(APP, 'pdf-stamp.js'), {
   atob: s => Buffer.from(s, 'base64').toString('binary')
 });
 
-const IRN = '56261ce5227241efb114a6d60617be398be0923f8fa39fec330407ce110be1ef';
-const ACK = '112631363872267';
-const CLIENT_MARK = 'ADIVISHNU MARINE FOODS PVT LTD';
+const IRN = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+const ACK = '112010036531240';
+const CLIENT_MARK = 'ZYLKER EXPORTS PVT LTD';
 
 /* Stand-in for the QR image Zoho Books serves at qr_link. */
 function qrPngBase64() {
@@ -83,7 +83,7 @@ function qrPngBase64() {
 function clientTemplateHtml() {
   let rows = '';
   for (let i = 1; i <= 55; i++) {
-    rows += `<tr><td>${i}</td><td>Finished Product (Vannamei Stock) grade ${i}</td>`
+    rows += `<tr><td>${i}</td><td>Finished Product (Frozen Shrimp) grade ${i}</td>`
           + `<td>030617</td><td>18,360 kg</td><td>5.15</td><td>94,554.00</td></tr>`;
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -97,7 +97,7 @@ function clientTemplateHtml() {
     td { border: 1px solid #ccc; padding: 4px 5px; }
   </style></head><body>
     <div class="brand"><h1>${CLIENT_MARK}</h1>
-      <p>Plot No. D14, Sy No. 209, Kakinada SEZ Limited, Andhra Pradesh 533448</p></div>
+      <p>Plot 42, Industrial Estate Road, Chennai, Tamil Nadu 600001</p></div>
     <table><thead><tr><th>#</th><th>Item</th><th>HSN</th><th>Qty</th><th>Rate</th>
       <th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
   </body></html>`;
@@ -140,7 +140,7 @@ function clientTemplateHtml() {
       .items.map(i => i.str).join('');
     const hasIrn = text.includes(IRN);
     const hasAck = text.includes(ACK);
-    const hasClient = text.includes('Vannamei') || text.includes(CLIENT_MARK);
+    const hasClient = text.includes('Frozen Shrimp') || text.includes(CLIENT_MARK);
     const good = hasIrn && hasAck && hasClient;
     if (!good) fail++;
     console.log(`  page ${String(p).padStart(2)}  IRN:${hasIrn ? 'yes' : 'NO '}  `

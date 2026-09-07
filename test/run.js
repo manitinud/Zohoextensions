@@ -23,24 +23,24 @@ const ok = (name, cond, extra) => {
 };
 
 console.log('\nEInvoice._read (verbatim einvoice_details from live orgs)');
-// Adivishnu Marine Foods, invoice AVMF/PC/INV/006.
+// Verbatim shape of a live Indian org's payload (identifiers anonymised).
 const REAL = {
-  inv_ref_num: '56261ce5227241efb114a6d60617be398be0923f8fa39fec330407ce110be1ef',
+  inv_ref_num: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
   status_formatted: 'Pushed',
-  ack_number: '112631363872267',
+  ack_number: '112010036531240',
   status: 'pushed',
   formatted_status: 'Pushed',
   ack_date: '2026-07-09 11:12:00'
 };
 const read = EInvoice._read(REAL);
 ok('IRN comes from inv_ref_num', read.irn === REAL.inv_ref_num, read.irn);
-ok('ack number', read.ackNo === '112631363872267', read.ackNo);
+ok('ack number', read.ackNo === '112010036531240', read.ackNo);
 ok('ack date', read.ackDate === '2026-07-09 11:12:00', read.ackDate);
 ok('status prefers formatted', read.status === 'Pushed', read.status);
 
-// Surie Polex, invoice BT/25-26/1312 — the detail payload also carries qr_link.
+// A live org's detail payload also carries qr_link (anonymised).
 const WITH_QR = Object.assign({}, REAL, {
-  qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c'
+  qr_link: 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-012345'
 });
 ok('qr link read', EInvoice._read(WITH_QR).qrLink === WITH_QR.qr_link);
 ok('list payload without qr_link', EInvoice._read(REAL).qrLink === null);
@@ -143,12 +143,12 @@ ok('the three keys are distinct',
 console.log('\neInvoiceID extraction from a real qr_link');
 // The QR endpoint is pinned by its API configuration, so the token has to be
 // lifted out of the link Books returns and passed as a parameter.
-const QR_LINK = 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-48da5c64ec31e389'
-              + '51c2c37fa8892c055843686d38d509299c3d4561ea68d434';
+const QR_LINK = 'https://books.zoho.in/einvoice/qrcode?eInvoiceID=2-0123456789abcdef'
+              + '0123456789abcdef0123456789abcdef0123456789abcdef';
 const token = /[?&]eInvoiceID=([^&]+)/i.exec(QR_LINK);
 ok('token found in qr_link', !!token);
 ok('token is the full value',
-   token[1] === '2-48da5c64ec31e38951c2c37fa8892c055843686d38d509299c3d4561ea68d434');
+   token[1] === '2-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
 ok('no token in a link without one',
    /[?&]eInvoiceID=([^&]+)/i.exec('https://books.zoho.in/einvoice/qrcode') === null);
 
