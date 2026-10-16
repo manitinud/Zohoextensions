@@ -130,6 +130,21 @@ async function run(browser, name, scenario, checks) {
         ok('amount in words printed',
            text.includes('FOUR LAKH NINETY EIGHT THOUSAND'));
       }
+      // The Download button names the file from the bill, never a random id.
+      await page.evaluate(() => {
+        window.__dlName = null;
+        const realClick = HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click = function () {
+          if (this.download) { window.__dlName = this.download; return; }
+          return realClick.apply(this, arguments);
+        };
+      });
+      await page.click('#download-btn');
+      await page.waitForFunction(() => window.__dlName !== null, { timeout: 20000 })
+        .catch(() => {});
+      const dl = await page.evaluate(() => window.__dlName);
+      ok('download named from bill, party and date',
+         dl === 'ZYL(P)-26-27-76 - P. Satyanarayana - 14-04-2026.pdf', dl);
     });
 
   console.log(`\n  ${pass} passed, ${fail} failed\n`);

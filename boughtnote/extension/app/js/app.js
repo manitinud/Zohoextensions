@@ -74,9 +74,12 @@
       .then(function (bytes) { state.pdfBytes = bytes; return bytes; });
   }
 
+  // The saved file is named from the bill, not a browser-generated id:
+  // "<bill no> - <date>.pdf".
   function noteFileName() {
-    var no = ((state.note && state.note.billNo) || 'bill').replace(/[^A-Za-z0-9._-]+/g, '-');
-    return 'BoughtNote-' + no + '.pdf';
+    var n = state.note || {};
+    var name = [n.billNo || 'bill', n.billDate || ''].filter(Boolean).join(' - ');
+    return name.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim() + '.pdf';
   }
 
   function openPrint() {
