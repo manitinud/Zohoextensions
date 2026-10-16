@@ -1,0 +1,13 @@
+{
+  "extension": {
+    "name": "Bought Note",
+    "description": "Print a purchase bill as a Bought Note — supplier, PAN, variety, count, quantity, rate, TDS and amount in words, in Original and Duplicate copies. Everything is read from the bill; nothing to set up."
+  },
+  "widget": {
+    "bill": {
+      "title": "Bought Note",
+      "print": "Print Bought Note",
+      "refresh": "Refresh"
+    }
+  }
+}

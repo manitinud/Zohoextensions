@@ -1,0 +1,23 @@
+{
+  "locale": ["en"],
+  "service": "FINANCE",
+  "sdkVersion": "2.0.0",
+  "whiteListedDomains": [],
+  "modules": {
+    "widgets": [
+      {
+        "location": "bill.details.sidebar",
+        "name": "Bought Note",
+        "url": "/app/widget.html",
+        "logo": "/app/img/logo.png"
+      }
+    ]
+  },
+  "config": [],
+  "usedConnections": [
+    {
+      "connectionLinkName": "zbooksbn",
+      "connectionName": "zbooksbn"
+    }
+  ]
+}

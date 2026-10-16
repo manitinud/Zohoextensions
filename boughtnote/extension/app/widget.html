@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bought Note</title>
+  <link rel="stylesheet" href="css/widget.css">
+</head>
+<body>
+  <div class="panel">
+    <header class="panel-head">
+      <h1>Bought Note</h1>
+      <span class="inv-no" id="bill-no"></span>
+    </header>
+
+    <div class="status status--info" id="status">Loading…</div>
+
+    <div class="body">
+      <div class="details" id="details"></div>
+    </div>
+
+    <footer class="actions">
+      <button type="button" class="btn btn-primary" id="print-btn" disabled>Print Bought Note</button>
+      <button type="button" class="btn" id="reload-btn">Refresh</button>
+    </footer>
+
+    <div id="diag" class="diag"></div>
+
+    <p class="hint">
+      Prints this bill as a Bought Note — Original and Duplicate copies with supplier,
+      PAN, variety, count, quantity, rate, TDS and amount in words. Everything is read
+      from the bill; there is nothing to enter.
+    </p>
+  </div>
+
+  <script>
+  /*
+   * SDK loader — identical to the proven e-Invoice Print loader. API
+   * Configurations demand the 2.0 SDK; v1.0 is kept last so a wrong guess
+   * degrades instead of killing the widget.
+   */
+  (function () {
+    var urls = [
+      'https://static.zohocdn.com/zohofinance/v2.0/zf_sdk.js',
+      'https://static.zohocdn.com/zohofinance/v2/zf_sdk.js',
+      'https://js.zohostatic.com/zohofinance/v2.0/zf_sdk.js',
+      'https://static.zohocdn.com/zohofinance/v1.0/zf_sdk.js'
+    ];
+    window.__sdkReady = new Promise(function (resolve) {
+      if (window.ZFAPPS) { window.__sdkUrl = 'pre-provided'; return resolve(); }
+      var i = 0;
+      (function next() {
+        if (i >= urls.length) { window.__sdkUrl = 'none loaded'; return resolve(); }
+        var el = document.createElement('script');
+        el.src = urls[i];
+        el.onload = function () { window.__sdkUrl = urls[i]; resolve(); };
+        el.onerror = function () { i++; next(); };
+        document.head.appendChild(el);
+      })();
+    });
+  })();
+  </script>
+  <script src="js/zf-client.js"></script>
+  <script src="js/boughtnote.js"></script>
+  <script src="js/vendor-pdf-lib.js"></script>
+  <script src="js/bn-pdf.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
