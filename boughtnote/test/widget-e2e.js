@@ -143,8 +143,8 @@ async function run(browser, name, scenario, checks) {
       await page.waitForFunction(() => window.__dlName !== null, { timeout: 20000 })
         .catch(() => {});
       const dl = await page.evaluate(() => window.__dlName);
-      ok('download named from bill, party and date',
-         dl === 'ZYL(P)-26-27-76 - P. Satyanarayana - 14-04-2026.pdf', dl);
+      ok('download named from bill number and date',
+         dl === 'ZYL(P)-26-27-76 - 14-04-2026.pdf', dl);
     });
 
   console.log(`\n  ${pass} passed, ${fail} failed\n`);
