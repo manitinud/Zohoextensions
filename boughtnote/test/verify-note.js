@@ -88,9 +88,10 @@ const ORG = { name: 'ZYLKER EXPORTS PVT LTD', gst_no: '37AAAAA0000A1Z5' };
     .items.map(i => i.str).join(' ');
   ok('header repeats on every page', firstText.includes('BOUGHT NOTE'));
   ok('earlier pages say continued', firstText.includes('Continued'));
-  ok('totals only on the last page',
-     !firstText.includes('Amount Payable After TDS')
-     && lastText.includes('Amount Payable After TDS'));
+  ok('grid labels on every page, amounts only on the last',
+     firstText.includes('Amount Payable After')
+     && !firstText.includes('497570.93')
+     && lastText.includes('497570.93'));
 
   console.log(`\n${pass} passed, ${fail} failed\n`);
   process.exit(fail ? 1 : 0);

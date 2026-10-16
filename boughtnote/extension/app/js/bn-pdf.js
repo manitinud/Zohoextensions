@@ -1,23 +1,28 @@
 /*
  * Draws the Bought Note PDF with pdf-lib: A4 landscape, two identical copies
- * side by side (Original | Duplicate), matching the organization's existing
- * printed format:
+ * side by side (Original | Duplicate), replicating the organization's
+ * existing printed format cell for cell:
  *
- *   GST: <gstin>            <COMPANY NAME>            BOUGHT NOTE
- *   Bill No / Bill Date, Supplier / Address / PAN
- *   Sl.No  Variety  Count  Qty in KGs  Rate In Rs  Amt In Rs
- *   Total, Less TDS @ x %, Amount Payable After TDS, Amount in Words
- *   Supplier Signature   Checked By   Authorized Sign
+ *   [ Original ]  <- banner row inside the outer border
+ *   GST: <gstin>   (logo)  <COMPANY NAME>  /  BOUGHT NOTE
+ *   Bill No ... Bill Date / Supplier / Address / PAN
+ *   boxed grid: Sl.No | Variety | Count | Qty in KGs | Rate In Rs | Amt In Rs
+ *   fixed-height item area, then Total / Less TDS / Amount Payable After TDS
+ *   Amount in Words row, and three tall signature cells.
  *
- * Long bills paginate: line rows repeat with the header on every page, the
- * totals block prints on the last page only.
+ * The note block occupies the upper part of the page with the bottom left
+ * blank, exactly like the reference. Long bills paginate; the totals and
+ * signature section print on every page's grid the way the reference does,
+ * with amounts only on the last page.
  */
 var BNPdf = (function () {
 
   var PAGE_W = 841.89, PAGE_H = 595.28;   // A4 landscape, points
   var COPY_W = PAGE_W / 2;
-  var MARGIN = 14;
-  var ROWS_PER_PAGE = 12;
+  var ROWS_PER_PAGE = 10;
+
+  // Column widths as fractions of the grid width.
+  var COLS = [0.08, 0.24, 0.10, 0.18, 0.17, 0.23]; // Sl, Variety, Count, Qty, Rate, Amt
 
   function fmt(n, dp) { return Number(n || 0).toFixed(dp); }
 
@@ -33,133 +38,193 @@ var BNPdf = (function () {
     return lines;
   }
 
-  function drawCopy(doc, page, fonts, note, x0, label, rows, firstPage, lastPage) {
+  function drawCopy(page, fonts, note, x0, label, rows, lastPage, logo) {
     var rgb = PDFLib.rgb;
     var black = rgb(0, 0, 0);
     var f = fonts.regular, fb = fonts.bold;
-    var left = x0 + MARGIN;
-    var right = x0 + COPY_W - MARGIN;
-    var w = right - left;
-    var y = PAGE_H - MARGIN - 4;
 
-    function text(s, x, size, font, opts) {
-      page.drawText(String(s), Object.assign(
-        { x: x, y: y, size: size, font: font || f, color: black }, opts || {}));
+    var outerL = x0 + 10, outerR = x0 + COPY_W - 10;
+    var top = PAGE_H - 22;
+
+    function text(s, x, y, size, font) {
+      page.drawText(String(s), { x: x, y: y, size: size, font: font || f, color: black });
     }
-    function rightText(s, xRight, size, font) {
-      var width = (font || f).widthOfTextAtSize(String(s), size);
-      page.drawText(String(s), { x: xRight - width, y: y, size: size,
-                                 font: font || f, color: black });
+    function rightText(s, xRight, y, size, font) {
+      var wdt = (font || f).widthOfTextAtSize(String(s), size);
+      text(s, xRight - wdt, y, size, font);
     }
-    function centerText(s, size, font) {
-      var width = (font || f).widthOfTextAtSize(String(s), size);
-      page.drawText(String(s), { x: x0 + (COPY_W - width) / 2, y: y, size: size,
-                                 font: font || f, color: black });
+    function centerText(s, cx, y, size, font) {
+      var wdt = (font || f).widthOfTextAtSize(String(s), size);
+      text(s, cx - wdt / 2, y, size, font);
     }
-    function hline(yy) {
-      page.drawLine({ start: { x: left, y: yy }, end: { x: right, y: yy },
-                      thickness: 0.6, color: black });
+    function box(x, y, w, h, thickness) {
+      page.drawRectangle({ x: x, y: y, width: w, height: h,
+                           borderWidth: thickness || 0.9, borderColor: black });
+    }
+    function vline(x, y1, y2) {
+      page.drawLine({ start: { x: x, y: y1 }, end: { x: x, y: y2 },
+                      thickness: 0.9, color: black });
     }
 
-    // Outer border of the copy.
-    page.drawRectangle({ x: x0 + 6, y: 6, width: COPY_W - 12, height: PAGE_H - 12,
-                         borderWidth: 0.8, borderColor: black });
+    var copyCx = x0 + COPY_W / 2;
 
-    centerText(label, 9, f); y -= 14;
-    text('GST: ' + (note.company.gstin || '-'), left, 9, fb); y -= 16;
-    centerText(note.company.name, 13, fb); y -= 16;
-    centerText('BOUGHT NOTE', 11, fb); y -= 16;
+    // ---- banner row: Original / Duplicate ----
+    var bannerH = 17;
+    var y = top - bannerH;
+    box(outerL, y, outerR - outerL, bannerH, 1.2);
+    centerText(label, copyCx, y + 5, 11, fb);
 
-    text('Bill No: ' + note.billNo, left, 9, fb);
-    rightText('Bill Date: ' + note.billDate, right, 9, fb); y -= 12;
-    text('Supplier: ' + note.supplier, left, 9, f); y -= 12;
-    wrap('Address: ' + (note.address || '-'), 58).forEach(function (l) {
-      text(l, left, 9, f); y -= 11;
+    // ---- header block (inside the outer border, no inner boxes) ----
+    y -= 17;
+    text('GST: ' + (note.company.gstin || '-'), outerL + 8, y, 12, fb);
+    if (logo) {
+      var lw = 42, lh = 42 * (logo.height / logo.width);
+      if (lh > 42) { lh = 42; lw = 42 * (logo.width / logo.height); }
+      page.drawImage(logo.img, { x: outerL + 10, y: y - 50, width: lw, height: lh });
+    }
+    y -= 26;
+    centerText(note.company.name, copyCx, y, 18, fb);
+    y -= 26;
+    centerText('BOUGHT NOTE', copyCx, y, 13.5, f);
+    y -= 19;
+    text('Bill No: ' + note.billNo, outerL + 8, y, 11.5, f);
+    rightText('Bill Date: ' + note.billDate, outerR - 8, y, 11.5, f);
+    y -= 16;
+    text('Supplier: ' + note.supplier, outerL + 8, y, 11.5, f);
+    y -= 16;
+    var addr = wrap('Address: ' + (note.address || '-'), 52);
+    addr.forEach(function (l) { text(l, outerL + 8, y, 11.5, f); y -= 15; });
+    text('PAN: ' + (note.pan || '-'), outerL + 8, y, 11.5, f);
+    y -= 7;
+
+    // ---- the grid ----
+    var gl = outerL + 4, gr = outerR - 4, gw = gr - gl;
+    var xs = [gl];
+    COLS.forEach(function (c) { xs.push(xs[xs.length - 1] + c * gw); });
+    xs[xs.length - 1] = gr;
+
+    var headH = 16, rowH = 15;
+    var itemAreaH = Math.max(rows.length, ROWS_PER_PAGE) * rowH + 6;
+
+    // header row
+    y -= headH;
+    box(gl, y, gw, headH, 1.1);
+    for (var i = 1; i < xs.length - 1; i++) vline(xs[i], y, y + headH);
+    var HEAD = ['Sl.No', 'Variety', 'Count', 'Qty in KGs', 'Rate In Rs', 'Amt In Rs'];
+    HEAD.forEach(function (h, idx) {
+      text(h, xs[idx] + 3, y + 4.5, 10.5, fb);
     });
-    text('PAN: ' + (note.pan || '-'), left, 9, f); y -= 14;
 
-    // Table columns, as offsets within the copy.
-    var C = {
-      sl: left,
-      variety: left + 26,
-      countR: left + 0.44 * w,
-      qtyR: left + 0.62 * w,
-      rateR: left + 0.78 * w,
-      amtR: right
-    };
-    hline(y + 9);
-    text('Sl.No', C.sl, 8.5, fb);
-    text('Variety', C.variety, 8.5, fb);
-    rightText('Count', C.countR, 8.5, fb);
-    rightText('Qty in KGs', C.qtyR, 8.5, fb);
-    rightText('Rate In Rs', C.rateR, 8.5, fb);
-    rightText('Amt In Rs', C.amtR, 8.5, fb);
-    y -= 5; hline(y + 1); y -= 11;
-
+    // item area: one tall box with the column verticals running through it
+    var itemTop = y;
+    y -= itemAreaH;
+    box(gl, y, gw, itemAreaH, 1.1);
+    for (var j = 1; j < xs.length - 1; j++) vline(xs[j], y, itemTop);
+    var ry = itemTop - rowH + 3;
     rows.forEach(function (l) {
-      text(l.slNo, C.sl + 4, 9, f);
-      text(l.variety.slice(0, 22), C.variety, 9, f);
-      rightText(l.count ? fmt(l.count, 2) : '-', C.countR, 9, f);
-      rightText(fmt(l.qty, 3), C.qtyR, 9, f);
-      rightText(fmt(l.rate, 2), C.rateR, 9, f);
-      rightText(fmt(l.amount, 2), C.amtR, 9, f);
-      y -= 13;
+      centerText(String(l.slNo), (xs[0] + xs[1]) / 2, ry, 11, f);
+      text(String(l.variety).slice(0, 24), xs[1] + 4, ry, 11, f);
+      rightText(l.count ? fmt(l.count, 2) : '', xs[3] - 4, ry, 11, f);
+      rightText(fmt(l.qty, 3), xs[4] - 4, ry, 11, f);
+      rightText(fmt(l.rate, 2), xs[5] - 4, ry, 11, f);
+      rightText(fmt(l.amount, 2), xs[6] - 4, ry, 11, f);
+      ry -= rowH;
     });
-
     if (!lastPage) {
-      y -= 2;
-      text('Continued on the next page…', left, 8.5, f);
-    } else {
-      hline(y + 9);
-      text('Total', C.variety, 9, fb);
-      rightText(fmt(note.totalQty, 3), C.qtyR, 9, fb);
-      rightText(fmt(note.total, 2), C.amtR, 9, fb);
-      y -= 13;
-      text('Less TDS @ ' + Number(note.tdsPercent) + ' %', C.variety, 9, f);
-      rightText(fmt(note.tdsAmount, 2), C.amtR, 9, f);
-      y -= 13;
-      text('Amount Payable After TDS', C.variety, 9, fb);
-      rightText(fmt(note.payable, 2), C.amtR, 9, fb);
-      y -= 15;
-      text('Amount in Words', left, 9, fb); y -= 11;
-      wrap(note.amountWords, 60).forEach(function (l) {
-        text(l, left, 8.5, f); y -= 10;
-      });
+      text('Continued…', xs[1] + 4, y + 5, 9.5, f);
     }
 
-    // Signature band, pinned to the bottom of the copy.
-    var sy = 28;
-    page.drawLine({ start: { x: left, y: sy + 14 }, end: { x: right, y: sy + 14 },
-                    thickness: 0.6, color: black });
-    page.drawText('Supplier Signature', { x: left, y: sy, size: 8.5, font: f, color: black });
-    var cb = 'Checked By';
-    page.drawText(cb, { x: x0 + (COPY_W - f.widthOfTextAtSize(cb, 8.5)) / 2,
-                        y: sy, size: 8.5, font: f, color: black });
-    var as = 'Authorized Sign';
-    page.drawText(as, { x: right - f.widthOfTextAtSize(as, 8.5),
-                        y: sy, size: 8.5, font: f, color: black });
+    // totals rows: label spans Sl+Variety+Count; qty, rate, amt cells keep
+    // their verticals, exactly like the reference.
+    function totalsRow(h, drawCells) {
+      y -= h;
+      box(gl, y, gw, h, 1.1);
+      [xs[3], xs[4], xs[5]].forEach(function (x) { vline(x, y, y + h); });
+      drawCells(y, h);
+    }
+
+    totalsRow(16, function (yy) {
+      centerText('Total', (gl + xs[3]) / 2, yy + 4.5, 11.5, fb);
+      if (lastPage) {
+        rightText(fmt(note.totalQty, 3), xs[4] - 4, yy + 4.5, 11.5, fb);
+        rightText(fmt(note.total, 2), xs[6] - 4, yy + 4.5, 11.5, fb);
+      }
+    });
+    totalsRow(16, function (yy) {
+      centerText('Less TDS @ ' + Number(note.tdsPercent) + ' %',
+                 (gl + xs[3]) / 2, yy + 4.5, 11.5, f);
+      if (lastPage) rightText(fmt(note.tdsAmount, 2), xs[6] - 4, yy + 4.5, 11.5, f);
+    });
+    totalsRow(28, function (yy, h) {
+      centerText('Amount Payable After', (gl + xs[3]) / 2, yy + 16, 11.5, f);
+      centerText('TDS', (gl + xs[3]) / 2, yy + 4, 11.5, f);
+      if (lastPage) rightText(fmt(note.payable, 2), xs[6] - 4, yy + 10, 11.5, f);
+    });
+
+    // amount in words: label cell + words cell spanning the rest, wrapped by
+    // MEASURED width so long amounts never cross the cell border
+    function wrapToWidth(s, font, size, maxW) {
+      var words = String(s || '').split(/\s+/);
+      var lines = [], cur = '';
+      words.forEach(function (wd) {
+        var next = cur ? cur + ' ' + wd : wd;
+        if (font.widthOfTextAtSize(next, size) > maxW && cur) { lines.push(cur); cur = wd; }
+        else cur = next;
+      });
+      if (cur) lines.push(cur);
+      return lines;
+    }
+    var wordsCellW = (gr - xs[3]) - 12;
+    var wordsLines = lastPage ? wrapToWidth(note.amountWords, f, 10, wordsCellW) : [''];
+    var wordsH = Math.max(26, wordsLines.length * 12 + 10);
+    y -= wordsH;
+    box(gl, y, gw, wordsH, 1.1);
+    vline(xs[3], y, y + wordsH);
+    centerText('Amount in Words', (gl + xs[3]) / 2, y + wordsH / 2 - 4, 11.5, f);
+    if (lastPage) {
+      var wy = y + wordsH - 14;
+      var wcx = (xs[3] + gr) / 2;
+      wordsLines.forEach(function (l) { centerText(l, wcx, wy, 10, f); wy -= 12; });
+    }
+
+    // signature cells: three tall boxes, labels near the bottom
+    var sigH = 46;
+    y -= sigH;
+    var sx = [gl, gl + gw * 0.30, gl + gw * 0.65, gr];
+    box(gl, y, gw, sigH, 1.1);
+    vline(sx[1], y, y + sigH);
+    vline(sx[2], y, y + sigH);
+    centerText('Supplier', (sx[0] + sx[1]) / 2, y + 16, 11.5, f);
+    centerText('Signature', (sx[0] + sx[1]) / 2, y + 4, 11.5, f);
+    centerText('Checked By', (sx[1] + sx[2]) / 2, y + 10, 11.5, f);
+    centerText('Authorized Sign', (sx[2] + sx[3]) / 2, y + 10, 11.5, f);
+
+    // outer border wrapping everything
+    box(outerL, y - 4, outerR - outerL, top - (y - 4), 1.4);
   }
 
-  function render(note) {
+  function render(note, logoBytes) {
     return PDFLib.PDFDocument.create().then(function (doc) {
       return Promise.all([
         doc.embedFont(PDFLib.StandardFonts.Helvetica),
-        doc.embedFont(PDFLib.StandardFonts.HelveticaBold)
+        doc.embedFont(PDFLib.StandardFonts.HelveticaBold),
+        logoBytes ? doc.embedPng(logoBytes).catch(function () { return null; })
+                  : Promise.resolve(null)
       ]).then(function (fs) {
         var fonts = { regular: fs[0], bold: fs[1] };
+        var logoImg = fs[2];
+        var logo = logoImg
+          ? { img: logoImg, width: logoImg.width, height: logoImg.height }
+          : null;
         var pages = [];
         for (var i = 0; i < note.lines.length || i === 0; i += ROWS_PER_PAGE) {
           pages.push(note.lines.slice(i, i + ROWS_PER_PAGE));
         }
         pages.forEach(function (rows, pi) {
           var page = doc.addPage([PAGE_W, PAGE_H]);
-          // Divider between the two copies.
-          page.drawLine({ start: { x: COPY_W, y: 6 }, end: { x: COPY_W, y: PAGE_H - 6 },
-                          thickness: 0.5, color: PDFLib.rgb(0.4, 0.4, 0.4),
-                          dashArray: [3, 3] });
-          var firstPage = pi === 0, lastPage = pi === pages.length - 1;
-          drawCopy(doc, page, fonts, note, 0, 'Original', rows, firstPage, lastPage);
-          drawCopy(doc, page, fonts, note, COPY_W, 'Duplicate', rows, firstPage, lastPage);
+          var lastPage = pi === pages.length - 1;
+          drawCopy(page, fonts, note, 0, 'Original', rows, lastPage, logo);
+          drawCopy(page, fonts, note, COPY_W, 'Duplicate', rows, lastPage, logo);
         });
         return doc.save();
       });

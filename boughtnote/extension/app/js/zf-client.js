@@ -52,7 +52,7 @@ var ZFClient = (function () {
    * namespace the Developer Portal assigns when the extension is created —
    * visible in any generated name (ac__<NS>_getbill). Update NS once, here.
    */
-  var NS = 'in_PENDING';
+  var NS = 'in_oruy3vu';
   var API = {
     bill: 'ac__' + NS + '_getbill',
     vendor: 'ac__' + NS + '_getvendor'
