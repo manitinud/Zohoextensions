@@ -69,7 +69,16 @@
     setStatus('info', 'Building the Bought Note…');
     $('print-btn').disabled = true;
 
-    BNPdf.render(state.note)
+    // Company logo for the note header: a bundled app/img/company-logo.png
+    // wins (always works offline in the saved PDF); none bundled -> no logo.
+    var logoP = fetch('img/company-logo.png')
+      .then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+      .catch(function () { return null; });
+
+    logoP
+      .then(function (logoBytes) {
+        return BNPdf.render(state.note, logoBytes ? new Uint8Array(logoBytes) : null);
+      })
       .then(function (bytes) {
         var blob = new Blob([bytes], { type: 'application/pdf' });
         var url = URL.createObjectURL(blob);

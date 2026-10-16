@@ -6,7 +6,7 @@
   "modules": {
     "widgets": [
       {
-        "location": "bill.details.sidebar",
+        "location": "bills.details.sidebar",
         "name": "Bought Note",
         "url": "/app/widget.html",
         "logo": "/app/img/logo.png"

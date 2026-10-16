@@ -132,7 +132,8 @@ var BoughtNote = (function () {
     return {
       company: {
         name: (org && org.name) || '',
-        gstin: (org && (org.gst_no || org.tax_reg_no)) || ''
+        gstin: (org && (org.gst_no || org.tax_reg_no
+                || (org.tax_settings && org.tax_settings.tax_reg_no))) || ''
       },
       billNo: bill.bill_number || '',
       billDate: bill.date || '',
