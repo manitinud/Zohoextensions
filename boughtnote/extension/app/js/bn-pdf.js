@@ -21,6 +21,11 @@ var BNPdf = (function () {
   var COPY_W = PAGE_W / 2;
   var ROWS_PER_PAGE = 10;
 
+  // The note's palette: the organization's deep blue with a light tint for
+  // the totals band. Amount figures stay black for photocopy legibility.
+  function BLUE() { return PDFLib.rgb(0.078, 0.314, 0.49); }     // #14507d
+  function TINT() { return PDFLib.rgb(0.914, 0.937, 0.957); }    // #e9eff4
+
   // Column widths as fractions of the grid width.
   var COLS = [0.08, 0.24, 0.10, 0.18, 0.17, 0.23]; // Sl, Variety, Count, Qty, Rate, Amt
 
@@ -46,46 +51,50 @@ var BNPdf = (function () {
     var outerL = x0 + 10, outerR = x0 + COPY_W - 10;
     var top = PAGE_H - 22;
 
-    function text(s, x, y, size, font) {
-      page.drawText(String(s), { x: x, y: y, size: size, font: font || f, color: black });
+    var blue = BLUE(), tint = TINT();
+    function text(s, x, y, size, font, color) {
+      page.drawText(String(s), { x: x, y: y, size: size, font: font || f,
+                                 color: color || black });
     }
-    function rightText(s, xRight, y, size, font) {
+    function rightText(s, xRight, y, size, font, color) {
       var wdt = (font || f).widthOfTextAtSize(String(s), size);
-      text(s, xRight - wdt, y, size, font);
+      text(s, xRight - wdt, y, size, font, color);
     }
-    function centerText(s, cx, y, size, font) {
+    function centerText(s, cx, y, size, font, color) {
       var wdt = (font || f).widthOfTextAtSize(String(s), size);
-      text(s, cx - wdt / 2, y, size, font);
+      text(s, cx - wdt / 2, y, size, font, color);
     }
-    function box(x, y, w, h, thickness) {
+    function box(x, y, w, h, thickness, fill) {
       page.drawRectangle({ x: x, y: y, width: w, height: h,
-                           borderWidth: thickness || 0.9, borderColor: black });
+                           borderWidth: thickness || 0.9, borderColor: blue,
+                           color: fill || undefined });
     }
     function vline(x, y1, y2) {
       page.drawLine({ start: { x: x, y: y1 }, end: { x: x, y: y2 },
-                      thickness: 0.9, color: black });
+                      thickness: 0.9, color: blue });
     }
 
+    var white = rgb(1, 1, 1);
     var copyCx = x0 + COPY_W / 2;
 
     // ---- banner row: Original / Duplicate ----
     var bannerH = 17;
     var y = top - bannerH;
-    box(outerL, y, outerR - outerL, bannerH, 1.2);
-    centerText(label, copyCx, y + 5, 11, fb);
+    box(outerL, y, outerR - outerL, bannerH, 1.2, blue);
+    centerText(label, copyCx, y + 5, 11, fb, white);
 
     // ---- header block (inside the outer border, no inner boxes) ----
     y -= 17;
-    text('GST: ' + (note.company.gstin || '-'), outerL + 8, y, 12, fb);
+    text('GST: ' + (note.company.gstin || '-'), outerL + 8, y, 12, fb, blue);
     if (logo) {
       var lw = 42, lh = 42 * (logo.height / logo.width);
       if (lh > 42) { lh = 42; lw = 42 * (logo.width / logo.height); }
       page.drawImage(logo.img, { x: outerL + 10, y: y - 50, width: lw, height: lh });
     }
     y -= 26;
-    centerText(note.company.name, copyCx, y, 18, fb);
+    centerText(note.company.name, copyCx, y, 18, fb, blue);
     y -= 26;
-    centerText('BOUGHT NOTE', copyCx, y, 13.5, f);
+    centerText('BOUGHT NOTE', copyCx, y, 13.5, fb, blue);
     y -= 19;
     text('Bill No: ' + note.billNo, outerL + 8, y, 11.5, f);
     rightText('Bill Date: ' + note.billDate, outerR - 8, y, 11.5, f);
@@ -106,13 +115,12 @@ var BNPdf = (function () {
     var headH = 16, rowH = 15;
     var itemAreaH = Math.max(rows.length, ROWS_PER_PAGE) * rowH + 6;
 
-    // header row
+    // header row: dark blue band with white labels
     y -= headH;
-    box(gl, y, gw, headH, 1.1);
-    for (var i = 1; i < xs.length - 1; i++) vline(xs[i], y, y + headH);
+    box(gl, y, gw, headH, 1.1, blue);
     var HEAD = ['Sl.No', 'Variety', 'Count', 'Qty in KGs', 'Rate In Rs', 'Amt In Rs'];
     HEAD.forEach(function (h, idx) {
-      text(h, xs[idx] + 3, y + 4.5, 10.5, fb);
+      text(h, xs[idx] + 3, y + 4.5, 10.5, fb, white);
     });
 
     // item area: one tall box with the column verticals running through it
@@ -138,7 +146,7 @@ var BNPdf = (function () {
     // their verticals, exactly like the reference.
     function totalsRow(h, drawCells) {
       y -= h;
-      box(gl, y, gw, h, 1.1);
+      box(gl, y, gw, h, 1.1, tint);
       [xs[3], xs[4], xs[5]].forEach(function (x) { vline(x, y, y + h); });
       drawCells(y, h);
     }
