@@ -29,7 +29,8 @@ function buildMockScript(scenario) {
     total: 498069,
     line_items: [
       { name: 'Vannamei Stock', description: '103 C', quantity: 1098.8, rate: 257,
-        item_total: 282391.6, item_custom_fields: [] },
+        item_total: 282391.6,
+        item_custom_fields: [{ api_name: 'cf_count', value: 103 }] },
       { name: 'Vannamei Stock', description: '106.5 C', quantity: 850.8, rate: 253.5,
         item_total: 215677.8,
         item_custom_fields: [{ api_name: 'cf_count', value: 106.5 }] }

@@ -32,16 +32,14 @@ ok('paise appended', w(498069.4) === 'FOUR LAKH NINETY EIGHT THOUSAND SIXTY NINE
 ok('teens', w(119) === 'ONE HUNDRED AND NINETEEN RUPEES', w(119));
 ok('exact lakh', w(500000) === 'FIVE LAKH RUPEES', w(500000));
 
-console.log('\nCount per line — cf_count first, description convention second');
+console.log('\nCount per line — the Count field ONLY, never the description');
 const lc = BoughtNote._lineCount;
 ok('cf_count in item_custom_fields wins',
    lc({ item_custom_fields: [{ api_name: 'cf_count', value: 70 }], description: '103 C' }) === '70');
 ok('flattened cf_count accepted', lc({ cf_count: 103.5 }) === '103.5');
-ok('description "103 C" parsed', lc({ description: '103 C' }) === '103');
-ok('description "106.5 C" parsed', lc({ description: '106.5 C' }) === '106.5');
-ok('description without count -> blank', lc({ description: 'fresh stock' }) === '');
-ok('no sources -> blank', lc({}) === '');
-ok('C must be a word boundary', lc({ description: '20 Cases' }) === '');
+ok('description "103 C" is NOT parsed', lc({ description: '103 C' }) === '');
+ok('description "106.5 C" is NOT parsed', lc({ description: '106.5 C' }) === '');
+ok('no count entered -> blank', lc({ description: 'fresh stock' }) === '' && lc({}) === '');
 
 console.log('\nNote model — built from the real bill payload shape (anonymised)');
 // Shape taken verbatim from a live AVMF farmer-purchase bill.
@@ -53,9 +51,11 @@ const BILL = {
   billing_address: { address: '', city: '', state: '' },
   line_items: [
     { name: 'Vannamei Stock', description: '103 C', quantity: 1098.8, rate: 257,
-      item_total: 282391.6, item_custom_fields: [] },
+      item_total: 282391.6,
+      item_custom_fields: [{ api_name: 'cf_count', value: 103 }] },
     { name: 'Vannamei Stock', description: '106.5 C', quantity: 850.8, rate: 253.5,
-      item_total: 215677.8, item_custom_fields: [] }
+      item_total: 215677.8,
+      item_custom_fields: [{ api_name: 'cf_count', value: 106.5 }] }
   ]
 };
 const VENDOR = { contact_name: 'P. Satyanarayana', pan_no: 'ACOPD7001N',
@@ -70,11 +70,13 @@ ok('address joined from the vendor', n.address === 'Main Road, Kakinada, Andhra 
 ok('company header from the organization', n.company.name === 'Zylker Exports Pvt Ltd'
    && n.company.gstin === '37AAAAA0000A1Z5');
 ok('two lines mapped', n.lines.length === 2);
-ok('counts parsed from descriptions', n.lines[0].count === '103' && n.lines[1].count === '106.5');
+ok('counts from the Count field', n.lines[0].count === '103' && n.lines[1].count === '106.5');
 ok('quantities summed', Math.abs(n.totalQty - 1949.6) < 1e-9, n.totalQty);
-ok('total prefers the bill total (adjustment included)', n.total === 498069, n.total);
+ok('no TDS: gross equals the bill total', n.total === 498069, n.total);
 ok('TDS defaults to the 0.1 % line with zero amount', n.tdsPercent === 0.1 && n.tdsAmount === 0);
-ok('payable = total - tds', n.payable === 498069);
+ok('payable is the bill total (already net of TDS in Books)', n.payable === 498069);
+ok('date prints dd-mm-yyyy', n.billDate === '14-04-2026', n.billDate);
+ok('formatDate passes non-ISO strings through', BoughtNote._formatDate('09-09-2026') === '09-09-2026');
 ok('words computed for the payable', /FOUR LAKH NINETY EIGHT THOUSAND SIXTY NINE RUPEES/.test(n.amountWords), n.amountWords);
 ok('empty bill detected', BoughtNote.isEmpty(BoughtNote.build({}, null, null)) === true);
 ok('this note is not empty', BoughtNote.isEmpty(n) === false);
@@ -84,7 +86,17 @@ const BILL_TDS = Object.assign({}, BILL, { tds_percent: '0.10', tds_amount: 498.
 const nt = BoughtNote.build(BILL_TDS, VENDOR, ORG);
 ok('percent from the bill', nt.tdsPercent === 0.1, nt.tdsPercent);
 ok('amount from the bill', nt.tdsAmount === 498.07);
-ok('payable net of TDS', Math.abs(nt.payable - 497570.93) < 1e-9, nt.payable);
+// Proven live: Books' bill total is ALREADY net of TDS. The note's gross
+// Total row is payable + TDS; subtracting again double-deducted it.
+ok('payable is the bill total, untouched', nt.payable === 498069, nt.payable);
+ok('gross total reconstructed as payable + TDS',
+   Math.abs(nt.total - 498567.07) < 1e-9, nt.total);
+
+console.log('\nCompany fallback — internal org constants when context is bare');
+const bare = BoughtNote.build(BILL, null, null);
+ok('name falls back to Adivishnu', /Adivishnu Marine Foods/.test(bare.company.name));
+ok('GSTIN falls back to the verified value', bare.company.gstin === '37AAXCA3167E1ZC');
+ok('context org still wins when present', n.company.name === 'Zylker Exports Pvt Ltd');
 
 console.log('\nZFClient request shapes — the proven url_param contract');
 const zbox = { console, Object, Promise, ZFAPPS: undefined, window: {}, document: { referrer: '' } };

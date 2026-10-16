@@ -72,7 +72,7 @@ async function run(browser, name, scenario, checks) {
     (s) => {
       ok('supplier rendered', s.details.includes('P. Satyanarayana'), s.details);
       ok('PAN from the vendor', s.details.includes('AAAAA0000A'));
-      ok('payable computed', s.details.includes('497570.93'), s.details);
+      ok('payable computed - bill total, net of TDS', s.details.includes('498069.00'), s.details);
       ok('ready to print', /ready to print/i.test(s.status), s.status);
       ok('print enabled', s.printDisabled === false);
       ok('url_param shape won', /accepted shape: conn\+url_param/.test(s.diag),
@@ -128,7 +128,7 @@ async function run(browser, name, scenario, checks) {
         ok('cf_count wins over the description where present',
            (text.split('106.50').length - 1) >= 2, text.slice(0, 300));
         ok('amount in words printed',
-           text.includes('FOUR LAKH NINETY SEVEN THOUSAND'));
+           text.includes('FOUR LAKH NINETY EIGHT THOUSAND'));
       }
     });
 

@@ -10,7 +10,7 @@
 
   var BUILD = 'bn-v1';
 
-  var state = { bill: null, org: null, vendor: null, note: null };
+  var state = { bill: null, org: null, vendor: null, note: null, pdfBytes: null };
 
   var diag = { lines: [] };
   function note(label, value) {
@@ -61,6 +61,24 @@
       + row('Payable', n.payable.toFixed(2));
   }
 
+  function buildPdf() {
+    if (state.pdfBytes) return Promise.resolve(state.pdfBytes);
+    // Company logo for the note header: a bundled app/img/company-logo.png
+    // wins (always works offline in the saved PDF); none bundled -> no logo.
+    return fetch('img/company-logo.png')
+      .then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+      .catch(function () { return null; })
+      .then(function (logoBytes) {
+        return BNPdf.render(state.note, logoBytes ? new Uint8Array(logoBytes) : null);
+      })
+      .then(function (bytes) { state.pdfBytes = bytes; return bytes; });
+  }
+
+  function noteFileName() {
+    var no = ((state.note && state.note.billNo) || 'bill').replace(/[^A-Za-z0-9._-]+/g, '-');
+    return 'BoughtNote-' + no + '.pdf';
+  }
+
   function openPrint() {
     if (!state.note || BoughtNote.isEmpty(state.note)) {
       setStatus('warn', 'Nothing to print - this bill has no line items.');
@@ -69,32 +87,47 @@
     setStatus('info', 'Building the Bought Note…');
     $('print-btn').disabled = true;
 
-    // Company logo for the note header: a bundled app/img/company-logo.png
-    // wins (always works offline in the saved PDF); none bundled -> no logo.
-    var logoP = fetch('img/company-logo.png')
-      .then(function (r) { return r.ok ? r.arrayBuffer() : null; })
-      .catch(function () { return null; });
-
-    logoP
-      .then(function (logoBytes) {
-        return BNPdf.render(state.note, logoBytes ? new Uint8Array(logoBytes) : null);
-      })
+    buildPdf()
       .then(function (bytes) {
         var blob = new Blob([bytes], { type: 'application/pdf' });
+        // The URL is NOT revoked: the viewer tab's own Save re-reads it, and
+        // revoking it on a timer made that save fail with a network error.
         var url = URL.createObjectURL(blob);
         var w = window.open(url, '_blank');
         if (!w) {
           setStatus('warn', 'Your browser blocked the new window. Allow pop-ups for Zoho Books, '
-            + 'then try again.');
+            + 'or use Download.');
         } else {
-          setStatus('ok', 'Bought Note ready. Print or save it from the new tab.');
+          setStatus('ok', 'Bought Note ready. Print it from the new tab, or use Download.');
         }
-        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
         $('print-btn').disabled = false;
       })
       .catch(function (err) {
         setStatus('error', 'Could not build the Bought Note: ' + (err.message || err));
         $('print-btn').disabled = false;
+      });
+  }
+
+  function downloadPdf() {
+    if (!state.note || BoughtNote.isEmpty(state.note)) {
+      setStatus('warn', 'Nothing to download - this bill has no line items.');
+      return;
+    }
+    setStatus('info', 'Building the Bought Note…');
+    buildPdf()
+      .then(function (bytes) {
+        var blob = new Blob([bytes], { type: 'application/pdf' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = noteFileName();
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setStatus('ok', 'Bought Note downloaded as ' + noteFileName() + '.');
+      })
+      .catch(function (err) {
+        setStatus('error', 'Could not build the Bought Note: ' + (err.message || err));
       });
   }
 
@@ -182,6 +215,7 @@
         });
       })
       .then(function () {
+        state.pdfBytes = null;
         state.note = BoughtNote.build(state.bill, state.vendor, state.org);
         var log = ZFClient._shapeLog();
         if (log.length) note('request shapes tried', log.join(' | '));
@@ -199,6 +233,7 @@
         }
         setStatus('ok', 'Bill loaded. Ready to print the Bought Note.');
         $('print-btn').disabled = false;
+        $('download-btn').disabled = false;
         fit();
       })
       .catch(function (err) {
@@ -209,6 +244,7 @@
 
   function boot() {
     $('print-btn').addEventListener('click', openPrint);
+    $('download-btn').addEventListener('click', downloadPdf);
     $('reload-btn').addEventListener('click', load);
 
     try { probeSdk(); } catch (e) { note('probe failed', e && e.message || String(e)); }

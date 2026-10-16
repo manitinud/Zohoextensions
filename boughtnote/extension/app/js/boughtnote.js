@@ -13,12 +13,30 @@
  */
 var BoughtNote = (function () {
 
+  /*
+   * Internal extension for one organization: when the widget's host context
+   * does not hand over the organization name/GSTIN (seen live), these
+   * verified values print instead. Update here if the company ever changes.
+   */
+  var DEFAULT_COMPANY = {
+    name: 'Adivishnu Marine Foods Pvt Ltd',
+    gstin: '37AAXCA3167E1ZC'
+  };
+
+  // Books stores dates as yyyy-mm-dd; the note prints dd-mm-yyyy.
+  function formatDate(d) {
+    var m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(d || ''));
+    return m ? m[3] + '-' + m[2] + '-' + m[1] : String(d || '');
+  }
+
   function num(v) {
     var n = Number(v);
     return isFinite(n) ? n : 0;
   }
 
-  /* Count for one line: cf_count custom field first, then the description. */
+  /* Count for one line: the cf_count line custom field, and ONLY that — the
+   * organization decided counts are entered in the Count column, so nothing
+   * is inferred from free-text descriptions. No count entered prints blank. */
   function lineCount(li) {
     var cfs = li.item_custom_fields || li.custom_fields || [];
     for (var i = 0; i < cfs.length; i++) {
@@ -32,8 +50,7 @@ var BoughtNote = (function () {
     if (li.cf_count !== undefined && li.cf_count !== null && li.cf_count !== '') {
       return String(li.cf_count);
     }
-    var m = /([0-9]+(?:\.[0-9]+)?)\s*C\b/i.exec(li.description || '');
-    return m ? m[1] : '';
+    return '';
   }
 
   function joinAddress(a) {
@@ -124,19 +141,27 @@ var BoughtNote = (function () {
     lines.forEach(function (l) { totalQty += l.qty; totalAmount += l.amount; });
 
     var tds = tdsOf(bill);
-    var total = num(bill.total) || totalAmount;
-    var payable = total - tds.amount;
+    /*
+     * Books' bill total is ALREADY net of TDS (sub_total - TDS + adjustment),
+     * proven against a live bill: sub_total 14,41,829.80, TDS 1,442.00,
+     * adjustment 0.20 -> total 14,40,388.00. The note's Total row is the
+     * GROSS, so it is reconstructed as payable + TDS; subtracting TDS from
+     * bill.total again double-deducted it.
+     */
+    var payable = num(bill.total) || (totalAmount - tds.amount);
+    var total = payable + tds.amount;
 
     var vaddr = joinAddress((vendor && vendor.billing_address) || bill.billing_address);
 
     return {
       company: {
-        name: (org && org.name) || '',
+        name: (org && org.name) || DEFAULT_COMPANY.name,
         gstin: (org && (org.gst_no || org.tax_reg_no
-                || (org.tax_settings && org.tax_settings.tax_reg_no))) || ''
+                || (org.tax_settings && org.tax_settings.tax_reg_no)))
+               || DEFAULT_COMPANY.gstin
       },
       billNo: bill.bill_number || '',
-      billDate: bill.date || '',
+      billDate: formatDate(bill.date),
       supplier: bill.vendor_name || (vendor && vendor.contact_name) || '',
       address: vaddr,
       pan: (vendor && vendor.pan_no) || '',
@@ -156,5 +181,5 @@ var BoughtNote = (function () {
 
   return { build: build, isEmpty: isEmpty,
            _amountInWords: amountInWords, _lineCount: lineCount,
-           _integerWords: integerWords };
+           _integerWords: integerWords, _formatDate: formatDate };
 })();
